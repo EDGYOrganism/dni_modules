@@ -6,6 +6,11 @@ from .activation_builder import (
     ReLUActivationBuilder,
     LeakyActivationBuilder,
 )
+from .synth_grad_builder import (
+    SynthGradBuilder,
+    LinearSynthGradBuilder,
+    Conv2dSynthGradBuilder,
+)
 
 __all__ = [
     "DNIBuilder",
@@ -14,4 +19,7 @@ __all__ = [
     "ActivationBuilder",
     "ReLUActivationBuilder",
     "LeakyActivationBuilder",
+    "SynthGradBuilder",
+    "LinearSynthGradBuilder",
+    "Conv2dSynthGradBuilder"
 ]
