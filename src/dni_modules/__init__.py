@@ -12,6 +12,7 @@ from .synth_grad_builder import (
     Conv2dSynthGradBuilder,
 )
 from .dni import DNI
+from .synth_grad import SynthGrad
 
 __all__ = [
     "DNIBuilder",
@@ -23,5 +24,6 @@ __all__ = [
     "SynthGradBuilder",
     "LinearSynthGradBuilder",
     "Conv2dSynthGradBuilder",
-    "DNI"
+    "DNI",
+    "SynthGrad"
 ]
