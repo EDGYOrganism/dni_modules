@@ -11,6 +11,7 @@ from .synth_grad_builder import (
     LinearSynthGradBuilder,
     Conv2dSynthGradBuilder,
 )
+from .dni import DNI
 
 __all__ = [
     "DNIBuilder",
@@ -21,5 +22,6 @@ __all__ = [
     "LeakyActivationBuilder",
     "SynthGradBuilder",
     "LinearSynthGradBuilder",
-    "Conv2dSynthGradBuilder"
+    "Conv2dSynthGradBuilder",
+    "DNI"
 ]
