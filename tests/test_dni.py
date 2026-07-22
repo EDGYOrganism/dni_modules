@@ -25,6 +25,7 @@ LINEAR_DNI_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(),
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
+        [True, False],  # batch_norm
     )
 )
 
@@ -44,6 +45,7 @@ CONV2D_DNI_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(),
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
+        [True, False],  # batch_norm
     )
 )
 
@@ -65,12 +67,15 @@ def conv2d_dni_builder_test_cases(request):
 
 @pytest.fixture
 def linear_dni_builder(linear_dni_builder_test_cases):
-    in_features, out_features, bias, activation_builder = linear_dni_builder_test_cases
+    in_features, out_features, bias, activation_builder, batch_norm = (
+        linear_dni_builder_test_cases
+    )
     return LinearDNIBuilder(
         in_features=in_features,
         out_features=out_features,
         bias=bias,
         activation_builder=activation_builder,
+        batch_norm=batch_norm,
     )
 
 
@@ -86,6 +91,7 @@ def conv2d_dni_builder(conv2d_dni_builder_test_cases):
         pooling_kernel_size,
         bias,
         activation_builder,
+        batch_norm,
     ) = conv2d_dni_builder_test_cases
     return Conv2dDNIBuilder(
         in_channels=in_channels,
@@ -97,6 +103,7 @@ def conv2d_dni_builder(conv2d_dni_builder_test_cases):
         pooling_kernel_size=pooling_kernel_size,
         bias=bias,
         activation_builder=activation_builder,
+        batch_norm=batch_norm,
     )
 
 
@@ -105,7 +112,7 @@ def test_linear_dni_init(linear_dni_builder):
     dni = DNI(linear_dni_builder)
 
     # Check net
-    assert len(dni.net) == 3
+    assert len(dni.net) == 3 if linear_dni_builder.batch_norm else 2
 
     # Check elig_tr
     assert dni.elig_tr.shape == dni.net[0].weight.shape
@@ -117,7 +124,7 @@ def test_conv2d_dni_init(conv2d_dni_builder):
     dni = DNI(conv2d_dni_builder)
 
     # Check net
-    assert len(dni.net) == 4
+    assert len(dni.net) == 4 if conv2d_dni_builder.batch_norm else 3
 
     # Check elig_tr
     assert dni.elig_tr.shape == dni.net[0].weight.shape

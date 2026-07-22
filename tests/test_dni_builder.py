@@ -25,6 +25,7 @@ LINEAR_DNI_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(),
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
+        [True, False],  # batch_norm
     )
 )
 
@@ -44,6 +45,7 @@ CONV2D_DNI_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(),
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
+        [True, False],  # batch_norm
     )
 )
 
@@ -57,55 +59,69 @@ def test_dni_builder_raises_error():
 
 
 @pytest.mark.parametrize(
-    "in_features, out_features, bias, activation_builder", LINEAR_DNI_BUILDER_TEST_CASES
+    "in_features, out_features, bias, activation_builder, batch_norm",
+    LINEAR_DNI_BUILDER_TEST_CASES,
 )
-def test_linear_dni_builder_init(in_features, out_features, bias, activation_builder):
+def test_linear_dni_builder_init(
+    in_features, out_features, bias, activation_builder, batch_norm
+):
     """Test the __init__ function of LinearDNIBuiler class"""
     builder = LinearDNIBuilder(
         in_features=in_features,
         out_features=out_features,
         bias=bias,
         activation_builder=activation_builder,
+        batch_norm=batch_norm,
     )
     assert builder.in_features == in_features
     assert builder.out_features == out_features
     assert builder.bias == bias
     assert type(builder.activation_builder) is type(activation_builder)
+    assert builder.batch_norm == batch_norm
 
 
 @pytest.mark.parametrize(
-    "in_features, out_features, bias, activation_builder", LINEAR_DNI_BUILDER_TEST_CASES
+    "in_features, out_features, bias, activation_builder, batch_norm",
+    LINEAR_DNI_BUILDER_TEST_CASES,
 )
-def test_linear_dni_builder_build(in_features, out_features, bias, activation_builder):
+def test_linear_dni_builder_build(
+    in_features, out_features, bias, activation_builder, batch_norm
+):
     """Test the build() function of LinearDNIBuiler class"""
     builder = LinearDNIBuilder(
         in_features=in_features,
         out_features=out_features,
         bias=bias,
         activation_builder=activation_builder,
+        batch_norm=batch_norm,
     )
     dni = builder.build()
-    assert len(dni) == 3
-    assert type(dni[0]) is nn.Linear
-    assert dni[0].weight.shape == (out_features, in_features)
+    i = 0  # layer index
+    assert len(dni) == 3 if batch_norm else 2
+    assert type(dni[i]) is nn.Linear
+    assert dni[i].weight.shape == (out_features, in_features)
     if bias is True:
-        assert dni[0].bias is not None
-        assert dni[0].bias.shape == (out_features,)
+        assert dni[i].bias is not None
+        assert dni[i].bias.shape == (out_features,)
     else:
-        assert dni[0].bias is None
-    assert type(dni[1]) is nn.BatchNorm1d
-    assert dni[1].num_features == out_features
+        assert dni[i].bias is None
+
+    i += 1
+    if batch_norm:
+        assert type(dni[i]) is nn.BatchNorm1d
+        assert dni[i].num_features == out_features
+        i += 1
 
     if type(activation_builder) is LeakyActivationBuilder:
-        assert type(dni[2]) is snntorch.Leaky
-        assert torch.isclose(dni[2].beta, torch.tensor(builder.activation_builder.beta))
+        assert type(dni[i]) is snntorch.Leaky
+        assert torch.isclose(dni[i].beta, torch.tensor(builder.activation_builder.beta))
         assert torch.isclose(
-            dni[2].threshold, torch.tensor(builder.activation_builder.threshold)
+            dni[i].threshold, torch.tensor(builder.activation_builder.threshold)
         )
 
 
 @pytest.mark.parametrize(
-    "in_channels, out_channels, kernel_size, stride, padding, pooling, pooling_kernel_size, bias, activation_builder",
+    "in_channels, out_channels, kernel_size, stride, padding, pooling, pooling_kernel_size, bias, activation_builder, batch_norm",
     CONV2D_DNI_BUILDER_TEST_CASES,
 )
 def test_conv2d_dni_builder_init(
@@ -118,6 +134,7 @@ def test_conv2d_dni_builder_init(
     pooling_kernel_size,
     bias,
     activation_builder,
+    batch_norm,
 ):
     """Test __init__ function of Conv2dDNIBuilder class"""
     builder = Conv2dDNIBuilder(
@@ -130,6 +147,7 @@ def test_conv2d_dni_builder_init(
         pooling_kernel_size=pooling_kernel_size,
         bias=bias,
         activation_builder=activation_builder,
+        batch_norm=batch_norm,
     )
 
     assert builder.in_channels == in_channels
@@ -141,10 +159,11 @@ def test_conv2d_dni_builder_init(
     assert builder.pooling_kernel_size == pooling_kernel_size
     assert builder.bias == bias
     assert type(builder.activation_builder) is type(activation_builder)
+    assert batch_norm == batch_norm
 
 
 @pytest.mark.parametrize(
-    "in_channels, out_channels, kernel_size, stride, padding, pooling, pooling_kernel_size, bias, activation_builder",
+    "in_channels, out_channels, kernel_size, stride, padding, pooling, pooling_kernel_size, bias, activation_builder, batch_norm",
     CONV2D_DNI_BUILDER_TEST_CASES,
 )
 def test_conv2d_dni_builder_build(
@@ -157,6 +176,7 @@ def test_conv2d_dni_builder_build(
     pooling_kernel_size,
     bias,
     activation_builder,
+    batch_norm,
 ):
     """Test build() function of Conv2dDNIBuilder class"""
     builder = Conv2dDNIBuilder(
@@ -169,26 +189,33 @@ def test_conv2d_dni_builder_build(
         pooling_kernel_size=pooling_kernel_size,
         bias=bias,
         activation_builder=activation_builder,
+        batch_norm=batch_norm,
     )
 
     dni = builder.build()
-    assert len(dni) == 4
-    assert type(dni[0]) is nn.Conv2d
-    assert dni[0].weight.shape == (out_channels, in_channels, kernel_size, kernel_size)
+    i = 0  # layer index
+    assert len(dni) == 4 if batch_norm else 3
+    assert type(dni[i]) is nn.Conv2d
+    assert dni[i].weight.shape == (out_channels, in_channels, kernel_size, kernel_size)
     if bias is True:
-        assert dni[0].bias is not None
-        assert dni[0].bias.shape == (out_channels,)
+        assert dni[i].bias is not None
+        assert dni[i].bias.shape == (out_channels,)
     else:
-        assert dni[0].bias is None
-    assert type(dni[1]) is nn.BatchNorm2d
-    assert dni[1].num_features == out_channels
+        assert dni[i].bias is None
+
+    i += 1
+    if batch_norm:
+        assert type(dni[i]) is nn.BatchNorm2d
+        assert dni[i].num_features == out_channels
+        i += 1
 
     if type(activation_builder) is LeakyActivationBuilder:
-        assert type(dni[2]) is snntorch.Leaky
-        assert torch.isclose(dni[2].beta, torch.tensor(builder.activation_builder.beta))
+        assert type(dni[i]) is snntorch.Leaky
+        assert torch.isclose(dni[i].beta, torch.tensor(builder.activation_builder.beta))
         assert torch.isclose(
-            dni[2].threshold, torch.tensor(builder.activation_builder.threshold)
+            dni[i].threshold, torch.tensor(builder.activation_builder.threshold)
         )
 
-    assert type(dni[3]) is pooling
-    assert dni[3].kernel_size == pooling_kernel_size
+    i += 1
+    assert type(dni[i]) is pooling
+    assert dni[i].kernel_size == pooling_kernel_size

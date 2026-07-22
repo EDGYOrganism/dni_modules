@@ -18,19 +18,23 @@ class LinearDNIBuilder(DNIBuilder):
         out_features: int,
         bias: bool = True,
         activation_builder: type(ActivationBuilder) = ReLUActivationBuilder(),
+        batch_norm: bool = True,
     ):
 
         self.in_features = in_features
         self.out_features = out_features
         self.bias = bias
         self.activation_builder = activation_builder
+        self.batch_norm = batch_norm
 
     def build(self):
-        return nn.Sequential(
-            nn.Linear(self.in_features, self.out_features, self.bias),
-            nn.BatchNorm1d(num_features=self.out_features),
-            self.activation_builder.build(),
-        )
+        layers = [nn.Linear(self.in_features, self.out_features, self.bias)]
+
+        if self.batch_norm:
+            layers.append(nn.BatchNorm1d(num_features=self.out_features))
+
+        layers.append(self.activation_builder.build())
+        return nn.Sequential(*layers)
 
 
 class Conv2dDNIBuilder(DNIBuilder):
@@ -45,6 +49,7 @@ class Conv2dDNIBuilder(DNIBuilder):
         pooling_kernel_size: int = 3,
         bias: bool = True,
         activation_builder: type(ActivationBuilder) = ReLUActivationBuilder(),
+        batch_norm: bool = True,
     ):
 
         self.in_channels = in_channels
@@ -56,9 +61,10 @@ class Conv2dDNIBuilder(DNIBuilder):
         self.pooling_kernel_size = pooling_kernel_size
         self.bias = bias
         self.activation_builder = activation_builder
+        self.batch_norm = batch_norm
 
     def build(self):
-        return nn.Sequential(
+        layers = [
             nn.Conv2d(
                 self.in_channels,
                 self.out_channels,
@@ -66,8 +72,13 @@ class Conv2dDNIBuilder(DNIBuilder):
                 self.stride,
                 self.padding,
                 bias=self.bias,
-            ),
-            nn.BatchNorm2d(num_features=self.out_channels),
-            self.activation_builder.build(),
-            self.pooling(self.pooling_kernel_size),
-        )
+            )
+        ]
+
+        if self.batch_norm:
+            layers.append(nn.BatchNorm2d(num_features=self.out_channels))
+
+        layers.append(self.activation_builder.build())
+        layers.append(self.pooling(self.pooling_kernel_size))
+
+        return nn.Sequential(*layers)
