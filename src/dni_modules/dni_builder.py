@@ -52,6 +52,9 @@ class Conv2dDNIBuilder(DNIBuilder):
         batch_norm: bool = True,
     ):
 
+        if kernel_size % 2 == 0:
+            raise ValueError(f"Odd kernel sizes not supported: {kernel_size}")
+
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
