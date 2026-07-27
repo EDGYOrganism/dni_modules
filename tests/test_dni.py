@@ -4,7 +4,7 @@ import pytest
 
 import torch
 import torch.nn as nn
-
+import snntorch
 
 from dni_modules import (
     DNI,
@@ -114,9 +114,9 @@ def test_linear_dni_init(linear_dni_builder):
     # Check net
     assert len(dni.net) == 3 if linear_dni_builder.batch_norm else 2
 
-    # Check elig_tr
-    assert dni.elig_tr.shape == dni.net[0].weight.shape
-    assert torch.count_nonzero(dni.elig_tr).item() == 0
+    # Check elig_eps
+    assert dni.elig_eps.shape == dni.layer.weight.shape
+    assert torch.count_nonzero(dni.elig_eps).item() == 0
 
 
 def test_conv2d_dni_init(conv2d_dni_builder):
@@ -126,34 +126,92 @@ def test_conv2d_dni_init(conv2d_dni_builder):
     # Check net
     assert len(dni.net) == 4 if conv2d_dni_builder.batch_norm else 3
 
-    # Check elig_tr
-    assert dni.elig_tr.shape == dni.net[0].weight.shape
-    assert torch.count_nonzero(dni.elig_tr).item() == 0
+    # Check elig_eps
+    assert dni.elig_eps.shape == dni.layer.weight.shape
+    assert torch.count_nonzero(dni.elig_eps).item() == 0
 
 
-def test_linear_dni_forward(linear_dni_builder, device):
+@pytest.mark.parametrize("eval", [True, False])
+def test_linear_dni_forward(linear_dni_builder, device, eval):
     """Test the forward() function of a DNI instance built with LinearDNIBuilder"""
     # Batch size
     B = 4
     x = torch.randn((B, linear_dni_builder.in_features), device=device)
 
     dni = DNI(linear_dni_builder).to(device)
+
+    if eval:
+        dni.eval()
+
     out = dni(x)
     assert out.shape[0] == B
     assert out.shape[1] == linear_dni_builder.out_features
+    if type(dni.activation) is snntorch.Leaky and dni.training:
+        assert torch.equal(
+            dni.elig_eps,
+            torch.mean(x, axis=0).unsqueeze(0).expand((dni.layer.out_features, -1)),
+        )
+        elig_eps_prev = dni.elig_eps
+        x_new = torch.randn((B, linear_dni_builder.in_features), device=device)
+        _ = dni(x_new)
+        assert torch.equal(
+            dni.elig_eps,
+            dni.activation.beta * elig_eps_prev
+            + torch.mean(x_new, axis=0)
+            .unsqueeze(0)
+            .expand((dni.layer.out_features, -1)),
+        )
+    else:
+        assert torch.count_nonzero(dni.elig_eps).item() == 0
 
 
-def test_conv2d_dni_forward(conv2d_dni_builder, device):
+@pytest.mark.parametrize("eval", [True, False])
+@pytest.mark.parametrize("B", [1, 4])  # Batch size
+def test_conv2d_dni_forward(conv2d_dni_builder, device, B, eval):
     """Test the forward() function of a DNI instance built with Conv2dDNIBuilder"""
-    # Batch size
-    B = 4
     height, width = (9, 9)
     x = torch.randn((B, conv2d_dni_builder.in_channels, height, width), device=device)
 
     dni = DNI(conv2d_dni_builder).to(device)
+
+    if eval:
+        dni.eval()
+
     out = dni(x)
     assert out.shape[0] == B
     assert out.shape[1] == conv2d_dni_builder.out_channels
     if conv2d_dni_builder.padding == "same":
         assert out.shape[2] == int(height / conv2d_dni_builder.pooling_kernel_size)
         assert out.shape[3] == int(width / conv2d_dni_builder.pooling_kernel_size)
+    if type(dni.activation) is snntorch.Leaky and dni.training:
+        # If padding has been set to "same" and kernel_size is odd, manually compute padding because unfold() function cannot accept string "same" for padding parameter.
+        if dni.layer.padding == "same" and dni.layer.kernel_size[0] % 2 == 1:
+            padding = dni.layer.kernel_size[0] // 2
+        else:
+            padding = dni.layer.padding
+
+        # Extract input patches of size k x k that the convolution sees
+        x_unfold = torch.nn.functional.unfold(
+            x,
+            kernel_size=dni.layer.kernel_size,
+            stride=dni.layer.stride,
+            padding=padding,
+        )  # Shape: (B, c_in*k*k, h_out*w_out)
+
+        # Reshape to separate channels and kernel dimensions
+        x_unfold = x_unfold.view(
+            x.shape[0],
+            dni.layer.in_channels,
+            dni.layer.kernel_size[0],
+            dni.layer.kernel_size[1],
+            -1,
+        )  # Shape: (B, c_in, k, k, h_out*w_out)
+
+        # Sum over spatial output locations
+        x_unfold = x_unfold.sum(dim=-1)  # Shape: (B, c_in, k, k)
+
+        dv = torch.mean(x_unfold, axis=0)  # Shape: (1, c_in, k, k)
+
+        assert torch.equal(dni.elig_eps, dv.expand(dni.layer.out_channels, -1, -1, -1))
+    else:
+        assert torch.count_nonzero(dni.elig_eps).item() == 0

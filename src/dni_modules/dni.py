@@ -9,7 +9,11 @@ class DNI(nn.Module):
         super().__init__()
 
         self.net = builder.build()
-        self.elig_tr = torch.zeros_like(self.net[0].weight)
+        self.layer = self.net[0]  # alias for Linear or Conv2d layer
+        self.activation = (
+            self.net[2] if builder.batch_norm else self.net[1]
+        )  # alias for activation layer
+        self.register_buffer("elig_eps", torch.zeros_like(self.layer.weight))
 
     def forward(self, x):
         out = x
@@ -19,4 +23,44 @@ class DNI(nn.Module):
             # Ensures compatibility between non-spiking and spiking activations
             if type(out) is tuple:
                 out = out[0]
+
+                # Update eligibility traces epsilon if activation is spiking
+                if self.training:
+                    if type(self.layer) is nn.Linear:
+                        dv = torch.mean(x, axis=0).unsqueeze(0)  # Shape: (1, D_in)
+
+                    if type(self.layer) is nn.Conv2d:
+                        # If padding has been set to "same" and kernel_size is odd, manually compute padding because unfold() function cannot accept string "same" for padding parameter.
+                        if (
+                            self.layer.padding == "same"
+                            and self.layer.kernel_size[0] % 2 == 1
+                        ):
+                            padding = self.layer.kernel_size[0] // 2
+                        else:
+                            padding = self.layer.padding
+
+                        # Extract input patches of size k x k that the convolution sees
+                        x_unfold = torch.nn.functional.unfold(
+                            x,
+                            kernel_size=self.layer.kernel_size,
+                            stride=self.layer.stride,
+                            padding=padding,
+                        )  # Shape: (B, c_in*k*k, h_out*w_out)
+
+                        # Reshape to separate channels and kernel dimensions
+                        x_unfold = x_unfold.view(
+                            x.shape[0],
+                            self.layer.in_channels,
+                            self.layer.kernel_size[0],
+                            self.layer.kernel_size[1],
+                            -1,
+                        )  # Shape: (B, c_in, k, k, h_out*w_out)
+
+                        # Sum over spatial output locations
+                        x_unfold = x_unfold.sum(dim=-1)  # Shape: (B, c_in, k, k)
+
+                        dv = torch.mean(x_unfold, axis=0)  # Shape: (1, c_in, k, k)
+
+                    self.elig_eps = self.activation.beta * self.elig_eps + dv
+
         return out
