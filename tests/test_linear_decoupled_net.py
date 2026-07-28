@@ -138,16 +138,11 @@ def test_linear_decoupled_net_init(
 
         # Check DNI layers
         for i in range(0, num_dni):
-            assert (
-                net.arch[i]["dni"].layer.in_features == in_features
-                if i == 0
-                else hidden_dni_features
-            )
-            assert net.arch[i]["dni"].layer.out_features == hidden_dni_features
-
             if i == 0:
-                assert net.arch[0]["synth_grad"] is None
+                assert net.arch[i]["dni"].layer.in_features == in_features
+                assert net.arch[i]["synth_grad"] is None
             else:
+                assert net.arch[i]["dni"].layer.in_features == hidden_dni_features
                 assert (
                     net.arch[i]["synth_grad"].net[0].in_features
                     == net.arch[i - 1]["dni"].layer.out_features
@@ -156,6 +151,8 @@ def test_linear_decoupled_net_init(
                     net.arch[i]["synth_grad"].net[-1].out_features
                     == net.arch[i - 1]["dni"].layer.out_features
                 )
+
+            assert net.arch[i]["dni"].layer.out_features == hidden_dni_features
 
         # Check output layer
         assert net.arch[-1]["dni"][0].in_features == hidden_dni_features
