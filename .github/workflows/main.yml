@@ -24,4 +24,4 @@ jobs:
         uv sync --all-extras
     - name: Test with pytest
       run: |
-        uv run pytest
+        uv run pytest -n auto
