@@ -6,7 +6,9 @@ from dni_modules import (
     DNIBuilder,
     SynthGradBuilder,
     LinearDNIBuilder,
+    Conv2dDNIBuilder,
     LinearSynthGradBuilder,
+    Conv2dSynthGradBuilder,
 )
 
 
@@ -83,6 +85,63 @@ class LinearDecoupledNet(DecoupledNet):
                     "dni": nn.Sequential(
                         nn.Linear(
                             in_features=self.hidden_dni_features,
+                            out_features=self.out_features,
+                            bias=self.dni_builder.bias,
+                        ),
+                        self.dni_builder.activation_builder.build(),
+                    ),
+                    "synth_grad": SynthGrad(self.synth_grad_builder),
+                }
+            )
+        )
+
+
+class Conv2dDecoupledNet(DecoupledNet):
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_dni_channels: int,
+        out_features: int,
+        dni_builder: Conv2dDNIBuilder,
+        synth_grad_builder: Conv2dSynthGradBuilder,
+        num_dni: int = 2,
+    ):
+        super().__init__(
+            dni_builder=dni_builder,
+            synth_grad_builder=synth_grad_builder,
+            num_dni=num_dni,
+        )
+
+        self.in_channels = in_channels
+        self.hidden_dni_channels = hidden_dni_channels
+        self.out_features = out_features
+
+        # Set out_channels for dni_builder
+        self.dni_builder.out_channels = self.hidden_dni_channels
+
+        # Set in_channels and out_channels for synth_grad_builder
+        self.synth_grad_builder.in_channels = self.hidden_dni_channels
+        self.synth_grad_builder.out_channels = self.hidden_dni_channels
+
+        for i in range(self.num_dni):
+            if i == 0:
+                self.dni_builder.in_channels = self.in_channels
+                self.dni_builder.pooling = nn.MaxPool2d
+            else:
+                self.dni_builder.in_channels = self.hidden_dni_channels
+                self.dni_builder.pooling = nn.AvgPool2d
+
+            synth_grad = SynthGrad(self.synth_grad_builder) if i > 0 else None
+            self.arch.append(
+                nn.ModuleDict({"dni": DNI(self.dni_builder), "synth_grad": synth_grad})
+            )
+
+        self.arch.append(
+            nn.ModuleDict(
+                {
+                    "dni": nn.Sequential(
+                        nn.Flatten(),  # Flatten the output of the last hidden DNI to pass it to a linear layer
+                        nn.LazyLinear(
                             out_features=self.out_features,
                             bias=self.dni_builder.bias,
                         ),
