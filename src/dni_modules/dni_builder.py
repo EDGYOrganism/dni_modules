@@ -53,7 +53,7 @@ class Conv2dDNIBuilder(DNIBuilder):
     ):
 
         if kernel_size % 2 == 0:
-            raise ValueError(f"Odd kernel sizes not supported: {kernel_size}")
+            raise ValueError(f"Even convolution kernel sizes not supported: {kernel_size}")
 
         self.in_channels = in_channels
         self.out_channels = out_channels

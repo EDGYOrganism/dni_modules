@@ -152,7 +152,7 @@ def test_conv2d_dni_builder_init(
         )
     except Exception as e:
         assert isinstance(e, ValueError)
-        assert str(e) == f"Odd kernel sizes not supported: {kernel_size}"
+        assert str(e) == f"Even convolution kernel sizes not supported: {kernel_size}"
     else:
         assert builder.in_channels == in_channels
         assert builder.out_channels == out_channels
@@ -198,7 +198,7 @@ def test_conv2d_dni_builder_build(
         )
     except Exception as e:
         assert isinstance(e, ValueError)
-        assert str(e) == f"Odd kernel sizes not supported: {kernel_size}"
+        assert str(e) == f"Even convolution kernel sizes not supported: {kernel_size}"
     else:
         dni = builder.build()
         i = 0  # layer index
