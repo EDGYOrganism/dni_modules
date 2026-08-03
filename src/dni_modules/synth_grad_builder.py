@@ -6,19 +6,39 @@ from .activation_builder import ActivationBuilder, ReLUActivationBuilder
 
 
 class SynthGradBuilder(ABC):
+    """Abstract SynthGradBuilder interface"""
+
     @abstractmethod
     def build(self):
         pass
 
 
 class LinearSynthGradBuilder(SynthGradBuilder):
+    """Builder for Linear Synthetic Gradient modules
+
+    Parameters
+    ----------
+    in_features : int
+        Number of input features
+    out_features : int
+        Number of output features
+    hidden_layer_size : int
+        Size of hidden layers
+    bias : bool
+        If set to False, the layers of the Synthetic Gradient module will not learn an additive bias.
+    activation_builder : ActivationBuilder, optional
+        Activation builder, by default ReLUActivationBuilder()
+    num_hidden : int, optional
+        Number of hidden layers, by default 1
+    """
+
     def __init__(
         self,
         in_features: int,
         out_features: int,
         hidden_layer_size: int,
         bias: bool,
-        activation_builder: type(ActivationBuilder) = ReLUActivationBuilder(),
+        activation_builder: ActivationBuilder = ReLUActivationBuilder(),
         num_hidden: int = 1,
     ):
 
@@ -30,6 +50,13 @@ class LinearSynthGradBuilder(SynthGradBuilder):
         self.num_hidden = num_hidden
 
     def build(self):
+        """Builds Linear Synthetic Gradient module.
+
+        Returns
+        -------
+        torch.nn.modules.container.Sequential
+            built nn.Sequential() containing layers for Linear SynthGrad
+        """
         layers = []
         if self.num_hidden == 0:
             layers.append(
@@ -69,6 +96,30 @@ class LinearSynthGradBuilder(SynthGradBuilder):
 
 
 class Conv2dSynthGradBuilder(SynthGradBuilder):
+    """Builder for Conv2d Synthetic Gradient modules
+
+    Parameters
+    ----------
+    in_channels : int
+        Number of channels in input tensor
+    out_channels : int
+        Number of channels in output tensor
+    hidden_layer_channels : int
+        Number of channels produced by hidden layer convolution
+    kernel_size : int
+        Size of convolving kernel
+    stride : int
+        Stride of the convolution
+    padding : int | str
+        Padding added to all sides of the input
+    bias : bool
+         If set to False, the layers of the Synthetic Gradient module will not learn an additive bias.
+    activation_builder : ActivationBuilder, optional
+        Activation builder, by default ReLUActivationBuilder()
+    num_hidden : int, optional
+        Number of hidden layers, by default 1
+    """
+
     def __init__(
         self,
         in_channels: int,
@@ -78,7 +129,7 @@ class Conv2dSynthGradBuilder(SynthGradBuilder):
         stride: int,
         padding: int | str,
         bias: bool,
-        activation_builder: type(ActivationBuilder) = ReLUActivationBuilder(),
+        activation_builder: ActivationBuilder = ReLUActivationBuilder(),
         num_hidden: int = 1,
     ):
 
@@ -93,6 +144,13 @@ class Conv2dSynthGradBuilder(SynthGradBuilder):
         self.num_hidden = num_hidden
 
     def build(self):
+        """Builds Conv2d Synthetic Gradient module.
+
+        Returns
+        -------
+        torch.nn.modules.container.Sequential
+            built nn.Sequential() containing layers for Conv2d SynthGrad
+        """
         layers = []
         if self.num_hidden == 0:
             layers.append(
