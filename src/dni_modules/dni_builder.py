@@ -6,18 +6,36 @@ from .activation_builder import ActivationBuilder, ReLUActivationBuilder
 
 
 class DNIBuilder(ABC):
+    """Abstract DNIBuilder interface"""
+
     @abstractmethod
     def build(self):
         pass
 
 
 class LinearDNIBuilder(DNIBuilder):
+    """Builder for Linear Decoupled Neural Interfaces
+
+    Parameters
+    ----------
+    in_features : int
+        Number of input features
+    out_features : int
+        Number of output features
+    bias : bool, optional
+        If set to False, the DNI will not learn an additive bias. By default True.
+    activation_builder : ActivationBuilder, optional
+        Activation builder, by default ReLUActivationBuilder()
+    batch_norm : bool, optional
+        If set to False, the DNI will not include a batch normalization layer. By default True.
+    """
+
     def __init__(
         self,
         in_features: int,
         out_features: int,
         bias: bool = True,
-        activation_builder: type(ActivationBuilder) = ReLUActivationBuilder(),
+        activation_builder: ActivationBuilder = ReLUActivationBuilder(),
         batch_norm: bool = True,
     ):
 
@@ -28,6 +46,13 @@ class LinearDNIBuilder(DNIBuilder):
         self.batch_norm = batch_norm
 
     def build(self):
+        """Builds Linear Decoupled Neural Interface.
+
+        Returns
+        -------
+        torch.nn.modules.container.Sequential
+            built nn.Sequential() containing layers for a Linear DNI
+        """
         layers = [nn.Linear(self.in_features, self.out_features, self.bias)]
 
         if self.batch_norm:
@@ -38,6 +63,37 @@ class LinearDNIBuilder(DNIBuilder):
 
 
 class Conv2dDNIBuilder(DNIBuilder):
+    """Builder for Conv2d Decoupled Neural Intefaces
+
+    Parameters
+    ----------
+    in_channels : int
+        Number of channels in the input image
+    out_channels : int
+        Number of channels produced by the convolution
+    kernel_size : int
+        Size of convolving kernel
+    stride : int, optional
+        Stride of the convolution
+    padding : int | str, optional
+        Padding added to all sides of the input, by default "same"
+    pooling : type[nn.Module], optional
+        Type of pooling layer, by default nn.MaxPool2d
+    pooling_kernel_size : int, optional
+        Size of pooling kernel, by default 3
+    bias : bool, optional
+        If set to False, the DNI will not learn an additive bias. By default True.
+    activation_builder : ActivationBuilder, optional
+        Activation builder, by default ReLUActivationBuilder()
+    batch_norm : bool, optional
+        If set to False, the DNI will not include a batch normalization layer. By default True.
+
+    Raises
+    ------
+    ValueError
+        Convolution kernels with even size are not supported.
+    """
+
     def __init__(
         self,
         in_channels: int,
@@ -48,12 +104,14 @@ class Conv2dDNIBuilder(DNIBuilder):
         pooling: type[nn.Module] = nn.MaxPool2d,
         pooling_kernel_size: int = 3,
         bias: bool = True,
-        activation_builder: type(ActivationBuilder) = ReLUActivationBuilder(),
+        activation_builder: ActivationBuilder = ReLUActivationBuilder(),
         batch_norm: bool = True,
     ):
 
         if kernel_size % 2 == 0:
-            raise ValueError(f"Even convolution kernel sizes not supported: {kernel_size}")
+            raise ValueError(
+                f"Even convolution kernel sizes not supported: {kernel_size}"
+            )
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -67,6 +125,13 @@ class Conv2dDNIBuilder(DNIBuilder):
         self.batch_norm = batch_norm
 
     def build(self):
+        """Builds Conv2d Decoupled Neural Interface.
+
+        Returns
+        -------
+        torch.nn.modules.container.Sequential
+            built nn.Sequential() containing layers for a Conv2d DNI
+        """
         layers = [
             nn.Conv2d(
                 self.in_channels,
