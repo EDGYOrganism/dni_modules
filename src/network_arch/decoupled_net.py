@@ -13,6 +13,24 @@ from dni_modules import (
 
 
 class DecoupledNet(nn.Module):
+    """Generic Decoupled Net class - not to be used directly
+
+
+    Parameters
+    ----------
+    dni_builder : DNIBuilder
+        DNIBuilder instance used for building DNI layers
+    synth_grad_builder : SynthGradBuilder
+        SynthGradBuilder instance used for building SynthGrad modules
+    num_dni : int, optional
+        Number of DNI layers, by default 2
+
+    Raises
+    ------
+    ValueError
+        Number of DNI layers cannot be smaller than 2.
+    """
+
     def __init__(
         self,
         dni_builder: DNIBuilder,
@@ -33,6 +51,22 @@ class DecoupledNet(nn.Module):
 
     # Common forward() function for subclasses of DecoupledNet
     def forward(self, x):
+        """Propagates input through all the DNI layers of the network.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor with shape :math:`(B, H_{in})` for Linear DNI and :math:`(B, C_{in}, H, W)` for Conv2d DNI,
+            where :math:`B` is the batch size, :math:`H_{in}` is the number of input features, :math:`C_{in}` is the number of input channels and
+            :math:`H` and :math:`W` are the input height and width.
+
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor with shape :math:`(B, H_{out})`, where :math:`B` is the batch size, :math:`H_{out}` is the number of output features.
+            :math:`H_{out}` is set as a parameter in the constructor of the children classes of DecoupledNet.
+        """
         out = x
         for layer in self.arch:
             out = layer["dni"](out)
@@ -44,6 +78,24 @@ class DecoupledNet(nn.Module):
 
 
 class LinearDecoupledNet(DecoupledNet):
+    """Creates a Decoupled Network consisting of linear DNIs and linear SynthGrad modules.
+
+    Parameters
+    ----------
+    in_features : int
+        Number of input features
+    hidden_dni_features : int
+        Number of features produced by hidden DNI layers
+    out_features : int
+        Number of output features
+    dni_builder : LinearDNIBuilder
+        LinearDNIBuilder instance used for building DNI layers
+    synth_grad_builder : LinearSynthGradBuilder
+        LinearSynthGrad instance used for building SynthGrad modules
+    num_dni : int, optional
+        Number of DNI layers, by default 2
+    """
+
     def __init__(
         self,
         in_features: int,
@@ -97,6 +149,25 @@ class LinearDecoupledNet(DecoupledNet):
 
 
 class Conv2dDecoupledNet(DecoupledNet):
+    """Creates a Decoupled Network consisting of Conv2d DNIs and Conv2d SynthGrad modules.
+
+    Parameters
+    ----------
+    in_channels : int
+        Number of channels in the input image
+    hidden_dni_channels : int
+        Number of channels in the tensors produced by hidden Conv2d DNIs
+    out_features : int
+        Number of output features
+    dni_builder : Conv2dDNIBuilder
+        Conv2dDNIBuilder instance used for building DNI layers
+    synth_grad_builder : Conv2dSynthGradBuilder
+        Conv2dSynthGradBuilder instance used for building SynthGrad layers
+    num_dni : int, optional
+        Number of DNI layers, by default 2
+
+    """
+
     def __init__(
         self,
         in_channels: int,
