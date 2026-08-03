@@ -5,7 +5,15 @@ from .dni_builder import DNIBuilder
 
 
 class DNI(nn.Module):
-    def __init__(self, builder: type(DNIBuilder)):
+    """Decoupled Neural Interface class
+
+    Parameters
+    ----------
+    builder : DNIBuilder
+        DNIBuilder instance used for constructing the DNI's internal net
+    """
+
+    def __init__(self, builder: DNIBuilder):
         super().__init__()
 
         self.net = builder.build()
@@ -16,6 +24,20 @@ class DNI(nn.Module):
         self.register_buffer("elig_eps", torch.zeros_like(self.layer.weight))
 
     def forward(self, x):
+        """Propagates input through DNI's internal net and updates eligibility traces epsilon if spiking activations are used.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor with shape :math:`(B, H_{in})` for Linear DNI and :math:`(B, C_{in}, H, W)` for Conv2d DNI,
+            where :math:`B` is the batch size, :math:`H_{in}` is the number of input features, :math:`C_{in}` is the number of input channels and
+            :math:`H` and :math:`W` are the input height and width.
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor
+        """
         out = x
         for layer in self.net:
             out = layer(out)
