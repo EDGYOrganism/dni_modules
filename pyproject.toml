@@ -1,0 +1,30 @@
+[project]
+name = "dni-modules"
+version = "0.1.0"
+description = "Decoupled Neural Interfaces package for creating Decoupled Artificial Neural Networks"
+readme = "README.md"
+authors = [
+    { name = "Epifanios Baikas", email = "e.baikas@soton.ac.uk" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy==1.26.4",
+    "snntorch>=1.0.0",
+    "torch==2.6.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.23,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.16.1",
+]
