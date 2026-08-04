@@ -3,6 +3,7 @@ name = "dni-modules"
 version = "0.1.0"
 description = "Decoupled Neural Interfaces package for creating Decoupled Artificial Neural Networks"
 readme = "README.md"
+license = {text = "MIT"}
 authors = [
     { name = "Epifanios Baikas", email = "e.baikas@soton.ac.uk" }
 ]

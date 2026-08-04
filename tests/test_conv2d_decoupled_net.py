@@ -17,7 +17,7 @@ from dni_modules import (
 CONV2D_DECOUPLED_NET_TEST_CASES = list(
     product(
         [1, 3],  # in_channels,
-        [4, 10],  # hidden_dni_channels,
+        [4, 6],  # hidden_dni_channels,
         [2, 10],  # out_features,
         [1, 2, 3],  # num_dni
     )
