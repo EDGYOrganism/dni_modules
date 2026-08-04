@@ -5,12 +5,12 @@ import pytest
 import torch
 import torch.nn as nn
 
-from network_arch import Conv2dDecoupledNet
 from dni_modules import (
     Conv2dDNIBuilder,
     Conv2dSynthGradBuilder,
     ReLUActivationBuilder,
     LeakyActivationBuilder,
+    Conv2dDecoupledNet
 )
 
 

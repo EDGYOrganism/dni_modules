@@ -4,12 +4,12 @@ import pytest
 
 import torch
 
-from network_arch import LinearDecoupledNet
 from dni_modules import (
     LinearDNIBuilder,
     LinearSynthGradBuilder,
     ReLUActivationBuilder,
     LeakyActivationBuilder,
+    LinearDecoupledNet
 )
 
 

@@ -1,4 +1,4 @@
-"""Network modules for snnTorch experiments with Decoupled Neural Intefaces."""
+"""Network modules for experiments with Decoupled Neural Intefaces."""
 
 from .dni_builder import DNIBuilder, LinearDNIBuilder, Conv2dDNIBuilder
 from .activation_builder import (
@@ -14,6 +14,8 @@ from .synth_grad_builder import (
 from .dni import DNI
 from .synth_grad import SynthGrad
 
+from .decoupled_net import LinearDecoupledNet, Conv2dDecoupledNet
+
 __all__ = [
     "DNIBuilder",
     "LinearDNIBuilder",
@@ -25,5 +27,7 @@ __all__ = [
     "LinearSynthGradBuilder",
     "Conv2dSynthGradBuilder",
     "DNI",
-    "SynthGrad"
+    "SynthGrad",
+    "LinearDecoupledNet",
+    "Conv2dDecoupledNet"
 ]
