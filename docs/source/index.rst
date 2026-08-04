@@ -1,0 +1,16 @@
+.. DecoupleNet documentation master file, created by
+   sphinx-quickstart on Tue Aug  4 17:31:32 2026.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+DecoupleNet documentation
+=========================
+
+This documentation describes how to build Artificial and Spiking Neural Networks using the components of the dni_modules package.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   dni_modules
+
