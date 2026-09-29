@@ -1,4 +1,4 @@
-This repository contains a Python package developed for creating Artificial Neural Networks through Decoupled Neural Interfaces.
+This repository contains a Python package developed for creating Artificial Neural Networks through Decoupled Neural Interfaces. The complete package documentation can be found [here](https://edgyorganism.github.io/dni_modules).  
 
 ### Project directory structure
 The directory structure of this repository viewed from the top-level directory is:

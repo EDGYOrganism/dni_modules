@@ -5,6 +5,7 @@ on:
     paths-ignore:
       - 'docs/**'                                # Skips this workflow if only docs were changed
       - '.github/workflows/deploy_docs.yml'
+      - 'README.md'
 
 jobs:
 
