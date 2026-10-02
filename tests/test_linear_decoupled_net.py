@@ -1,24 +1,22 @@
 from itertools import product
 
 import pytest
-
 import torch
 
 from dni_modules import (
+    LeakyActivationBuilder,
+    LinearDecoupledNet,
     LinearDNIBuilder,
     LinearSynthGradBuilder,
     ReLUActivationBuilder,
-    LeakyActivationBuilder,
-    LinearDecoupledNet
 )
-
 
 LINEAR_DECOUPLED_NET_TEST_CASES = list(
     product(
         [1, 100],  # in_features,
         [10, 30],  # hidden_dni_features,
         [2, 10],  # out_features
-        [1, 2, 5],  # num_dni
+        [1, 2, 5],  # num_hidden_dni
     )
 )
 
@@ -100,14 +98,14 @@ def linear_synth_grad_builder(linear_synth_grad_builder_test_cases):
 
 
 @pytest.mark.parametrize(
-    "in_features, hidden_dni_features, out_features, num_dni",
+    "in_features, hidden_dni_features, out_features, num_hidden_dni",
     LINEAR_DECOUPLED_NET_TEST_CASES,
 )
 def test_linear_decoupled_net_init(
     in_features,
     hidden_dni_features,
     out_features,
-    num_dni,
+    num_hidden_dni,
     linear_dni_builder,
     linear_synth_grad_builder,
 ):
@@ -119,13 +117,12 @@ def test_linear_decoupled_net_init(
             out_features=out_features,
             dni_builder=linear_dni_builder,
             synth_grad_builder=linear_synth_grad_builder,
-            num_dni=num_dni,
+            num_hidden_dni=num_hidden_dni,
         )
-    except Exception as e:
-        assert isinstance(e, ValueError)
+    except ValueError as e:
         assert (
             str(e)
-            == f"Number of DNI layers cannot be smaller than 2: num_dni = {num_dni}"
+            == f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
         )
     else:
         assert net.in_features == in_features
@@ -133,11 +130,11 @@ def test_linear_decoupled_net_init(
         assert net.out_features == out_features
         assert id(net.dni_builder) == id(linear_dni_builder)
         assert id(net.synth_grad_builder) == id(linear_synth_grad_builder)
-        assert net.num_dni == num_dni
-        assert len(net.arch) == num_dni + 1
+        assert net.num_hidden_dni == num_hidden_dni
+        assert len(net.arch) == num_hidden_dni + 1
 
-        # Check DNI layers
-        for i in range(0, num_dni):
+        # Check hidden DNI layers
+        for i in range(num_hidden_dni):
             if i == 0:
                 assert net.arch[i]["dni"].layer.in_features == in_features
                 assert net.arch[i]["synth_grad"] is None
@@ -154,22 +151,22 @@ def test_linear_decoupled_net_init(
 
             assert net.arch[i]["dni"].layer.out_features == hidden_dni_features
 
-        # Check output layer
-        assert net.arch[-1]["dni"][0].in_features == hidden_dni_features
-        assert net.arch[-1]["dni"][0].out_features == out_features
+        # Check output DNI layer
+        assert net.arch[-1]["dni"].layer.in_features == hidden_dni_features
+        assert net.arch[-1]["dni"].layer.out_features == out_features
 
         assert (
             net.arch[-1]["synth_grad"].net[0].in_features
-            == net.arch[num_dni - 1]["dni"].layer.out_features
+            == net.arch[num_hidden_dni - 1]["dni"].layer.out_features
         )
         assert (
             net.arch[-1]["synth_grad"].net[-1].out_features
-            == net.arch[num_dni - 1]["dni"].layer.out_features
+            == net.arch[num_hidden_dni - 1]["dni"].layer.out_features
         )
 
 
 @pytest.mark.parametrize(
-    "in_features, hidden_dni_features, out_features, num_dni",
+    "in_features, hidden_dni_features, out_features, num_hidden_dni",
     LINEAR_DECOUPLED_NET_TEST_CASES,
 )
 @pytest.mark.parametrize("B", [1, 4])  # batch size
@@ -177,7 +174,7 @@ def test_linear_decoupled_net_forward(
     in_features,
     hidden_dni_features,
     out_features,
-    num_dni,
+    num_hidden_dni,
     linear_dni_builder,
     linear_synth_grad_builder,
     device,
@@ -191,13 +188,13 @@ def test_linear_decoupled_net_forward(
             out_features=out_features,
             dni_builder=linear_dni_builder,
             synth_grad_builder=linear_synth_grad_builder,
-            num_dni=num_dni,
+            num_hidden_dni=num_hidden_dni,
         )
-    except Exception as e:
+    except ValueError as e:
         assert isinstance(e, ValueError)
         assert (
             str(e)
-            == f"Number of DNI layers cannot be smaller than 2: num_dni = {num_dni}"
+            == f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
         )
     else:
         net.to(device)

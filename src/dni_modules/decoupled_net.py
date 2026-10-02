@@ -1,14 +1,14 @@
-import torch.nn as nn
+from torch import nn
 
 from dni_modules import (
     DNI,
-    SynthGrad,
-    DNIBuilder,
-    SynthGradBuilder,
-    LinearDNIBuilder,
     Conv2dDNIBuilder,
-    LinearSynthGradBuilder,
     Conv2dSynthGradBuilder,
+    DNIBuilder,
+    LinearDNIBuilder,
+    LinearSynthGradBuilder,
+    SynthGrad,
+    SynthGradBuilder,
 )
 
 
@@ -22,30 +22,30 @@ class DecoupledNet(nn.Module):
         DNIBuilder instance used for building DNI layers
     synth_grad_builder : SynthGradBuilder
         SynthGradBuilder instance used for building SynthGrad modules
-    num_dni : int, optional
-        Number of DNI layers, by default 2
+    num_hidden_dni : int, optional
+        Number of hidden DNI layers, by default 2
 
     Raises
     ------
     ValueError
-        Number of DNI layers cannot be smaller than 2.
+        Number of hidden DNI layers cannot be smaller than 2.
     """
 
     def __init__(
         self,
         dni_builder: DNIBuilder,
         synth_grad_builder: SynthGradBuilder,
-        num_dni: int = 2,
+        num_hidden_dni: int = 2,
     ):
         super().__init__()
 
-        if num_dni < 2:
+        if num_hidden_dni < 2:
             raise ValueError(
-                f"Number of DNI layers cannot be smaller than 2: num_dni = {num_dni}"
+                f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
             )
         self.dni_builder = dni_builder
         self.synth_grad_builder = synth_grad_builder
-        self.num_dni = num_dni
+        self.num_hidden_dni = num_hidden_dni
 
         self.arch = nn.ModuleList()
 
@@ -92,8 +92,8 @@ class LinearDecoupledNet(DecoupledNet):
         LinearDNIBuilder instance used for building DNI layers
     synth_grad_builder : LinearSynthGradBuilder
         LinearSynthGrad instance used for building SynthGrad modules
-    num_dni : int, optional
-        Number of DNI layers, by default 2
+    num_hidden_dni : int, optional
+        Number of hidden DNI layers, by default 2
     """
 
     def __init__(
@@ -103,12 +103,12 @@ class LinearDecoupledNet(DecoupledNet):
         out_features: int,
         dni_builder: LinearDNIBuilder,
         synth_grad_builder: LinearSynthGradBuilder,
-        num_dni: int = 2,
+        num_hidden_dni: int = 2,
     ):
         super().__init__(
             dni_builder=dni_builder,
             synth_grad_builder=synth_grad_builder,
-            num_dni=num_dni,
+            num_hidden_dni=num_hidden_dni,
         )
 
         self.in_features = in_features
@@ -122,7 +122,7 @@ class LinearDecoupledNet(DecoupledNet):
         self.synth_grad_builder.in_features = self.hidden_dni_features
         self.synth_grad_builder.out_features = self.hidden_dni_features
 
-        for i in range(self.num_dni):
+        for i in range(self.num_hidden_dni):
             self.dni_builder.in_features = (
                 self.in_features if i == 0 else self.hidden_dni_features
             )
@@ -131,17 +131,14 @@ class LinearDecoupledNet(DecoupledNet):
                 nn.ModuleDict({"dni": DNI(self.dni_builder), "synth_grad": synth_grad})
             )
 
+        # Set out_features for dni_builder and deactivate batch_norm
+        self.dni_builder.out_features = self.out_features
+        self.dni_builder.batch_norm = False
+
         self.arch.append(
             nn.ModuleDict(
                 {
-                    "dni": nn.Sequential(
-                        nn.Linear(
-                            in_features=self.hidden_dni_features,
-                            out_features=self.out_features,
-                            bias=self.dni_builder.bias,
-                        ),
-                        self.dni_builder.activation_builder.build(),
-                    ),
+                    "dni": DNI(self.dni_builder),
                     "synth_grad": SynthGrad(self.synth_grad_builder),
                 }
             )
@@ -163,8 +160,8 @@ class Conv2dDecoupledNet(DecoupledNet):
         Conv2dDNIBuilder instance used for building DNI layers
     synth_grad_builder : Conv2dSynthGradBuilder
         Conv2dSynthGradBuilder instance used for building SynthGrad layers
-    num_dni : int, optional
-        Number of DNI layers, by default 2
+    num_hidden_dni : int, optional
+        Number of hidden DNI layers, by default 2
 
     """
 
@@ -175,12 +172,12 @@ class Conv2dDecoupledNet(DecoupledNet):
         out_features: int,
         dni_builder: Conv2dDNIBuilder,
         synth_grad_builder: Conv2dSynthGradBuilder,
-        num_dni: int = 2,
+        num_hidden_dni: int = 2,
     ):
         super().__init__(
             dni_builder=dni_builder,
             synth_grad_builder=synth_grad_builder,
-            num_dni=num_dni,
+            num_hidden_dni=num_hidden_dni,
         )
 
         self.in_channels = in_channels
@@ -194,7 +191,7 @@ class Conv2dDecoupledNet(DecoupledNet):
         self.synth_grad_builder.in_channels = self.hidden_dni_channels
         self.synth_grad_builder.out_channels = self.hidden_dni_channels
 
-        for i in range(self.num_dni):
+        for i in range(self.num_hidden_dni):
             if i == 0:
                 self.dni_builder.in_channels = self.in_channels
                 self.dni_builder.pooling = nn.MaxPool2d
