@@ -1,7 +1,7 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
-from .dni_builder import DNIBuilder
+from .dni_builder import DNIBuilder, LazyLinearDNIBuilder
 
 
 class DNI(nn.Module):
@@ -17,11 +17,17 @@ class DNI(nn.Module):
         super().__init__()
 
         self.net = builder.build()
-        self.layer = self.net[0]  # alias for Linear or Conv2d layer
-        self.activation = (
-            self.net[2] if builder.batch_norm else self.net[1]
-        )  # alias for activation layer
-        self.register_buffer("elig_eps", torch.zeros_like(self.layer.weight))
+
+        if type(builder) is LazyLinearDNIBuilder:
+            self.layer = self.net[1]
+            self.activation = self.net[2]
+            self.register_buffer("elig_eps", torch.zeros(1))
+        else:
+            self.layer = self.net[0]  # alias for Linear or Conv2d layer
+            self.activation = (
+                self.net[2] if builder.batch_norm else self.net[1]
+            )  # alias for activation layer
+            self.register_buffer("elig_eps", torch.zeros_like(self.layer.weight))
 
     def forward(self, x):
         """Propagates input through DNI's internal net and updates eligibility traces epsilon if spiking activations are used.
@@ -49,7 +55,19 @@ class DNI(nn.Module):
                 # Update eligibility traces epsilon if activation is spiking
                 if self.training:
                     if type(self.layer) is nn.Linear:
-                        dv = torch.mean(x, axis=0).unsqueeze(0)  # Shape: (1, D_in)
+                        # LazyLinear DNI
+                        if x.ndim > 2:
+                            dv = torch.mean(
+                                x.reshape(x.shape[0], -1), axis=0
+                            ).unsqueeze(0)  # Shape: (1, flattened vector dim)
+                            # Initialize elig_eps if it hasn't been initialized yet
+                            if torch.equal(
+                                self.elig_eps,
+                                torch.zeros(1, device=self.layer.weight.device),
+                            ):
+                                self.elig_eps = torch.zeros_like(self.layer.weight)
+                        else:
+                            dv = torch.mean(x, axis=0).unsqueeze(0)  # Shape: (1, D_in)
 
                     if type(self.layer) is nn.Conv2d:
                         # If padding has been set to "same" and kernel_size is odd, manually compute padding because unfold() function cannot accept string "same" for padding parameter.

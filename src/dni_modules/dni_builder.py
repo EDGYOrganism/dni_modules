@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-import torch.nn as nn
+from torch import nn
 
 from .activation_builder import ActivationBuilder, ReLUActivationBuilder
 
@@ -57,6 +57,48 @@ class LinearDNIBuilder(DNIBuilder):
 
         if self.batch_norm:
             layers.append(nn.BatchNorm1d(num_features=self.out_features))
+
+        layers.append(self.activation_builder.build())
+        return nn.Sequential(*layers)
+
+
+class LazyLinearDNIBuilder(DNIBuilder):
+    """Builder for LazyLinear Decoupled Neural Interfaces
+
+    Parameters
+    ----------
+    out_features : int
+        Number of output features
+    bias : bool, optional
+        If set to False, the DNI will not learn an additive bias. By default True.
+    activation_builder : ActivationBuilder, optional
+        Activation builder, by default ReLUActivationBuilder()
+    """
+
+    def __init__(
+        self,
+        out_features: int,
+        bias: bool = True,
+        activation_builder: ActivationBuilder = ReLUActivationBuilder(),
+    ):
+
+        self.out_features = out_features
+        self.bias = bias
+        self.activation_builder = activation_builder
+
+    def build(self):
+        """Builds LazyLinear Decoupled Neural Interface
+
+        Returns
+        -------
+        torch.nn.modules.container.Sequential
+            built nn.Sequentiual() containing layers for a LazyLinear DNI
+        """
+
+        layers = [
+            nn.Flatten(),
+            nn.LazyLinear(self.out_features, self.bias),
+        ]
 
         layers.append(self.activation_builder.build())
         return nn.Sequential(*layers)

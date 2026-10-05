@@ -9,6 +9,7 @@ import snntorch
 from dni_modules import (
     DNI,
     LinearDNIBuilder,
+    LazyLinearDNIBuilder,
     Conv2dDNIBuilder,
     ReLUActivationBuilder,
     LeakyActivationBuilder,
@@ -26,6 +27,19 @@ LINEAR_DNI_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
         [True, False],  # batch_norm
+    )
+)
+
+
+LAZY_LINEAR_DNI_BUILDER_TEST_CASES = list(
+    product(
+        [10, 20],  # out_features
+        [True, False],  # bias
+        [
+            ReLUActivationBuilder(),
+            LeakyActivationBuilder(),
+            LeakyActivationBuilder(beta=0.8, threshold=0.5),
+        ],  # activation_builder
     )
 )
 
@@ -60,6 +74,11 @@ def linear_dni_builder_test_cases(request):
     return request.param
 
 
+@pytest.fixture(params=LAZY_LINEAR_DNI_BUILDER_TEST_CASES)
+def lazy_linear_dni_builder_test_cases(request):
+    return request.param
+
+
 @pytest.fixture(params=CONV2D_DNI_BUILDER_TEST_CASES)
 def conv2d_dni_builder_test_cases(request):
     return request.param
@@ -76,6 +95,16 @@ def linear_dni_builder(linear_dni_builder_test_cases):
         bias=bias,
         activation_builder=activation_builder,
         batch_norm=batch_norm,
+    )
+
+
+@pytest.fixture
+def lazy_linear_dni_builder(lazy_linear_dni_builder_test_cases):
+    out_features, bias, activation_builder = lazy_linear_dni_builder_test_cases
+    return LazyLinearDNIBuilder(
+        out_features=out_features,
+        bias=bias,
+        activation_builder=activation_builder,
     )
 
 
@@ -117,6 +146,17 @@ def test_linear_dni_init(linear_dni_builder):
     # Check elig_eps
     assert dni.elig_eps.shape == dni.layer.weight.shape
     assert torch.count_nonzero(dni.elig_eps).item() == 0
+
+
+def test_lazy_linear_dni_init(lazy_linear_dni_builder):
+    """Test __init__ function of DNI class with a LazyLinearDNIBuilder instance"""
+    dni = DNI(lazy_linear_dni_builder)
+
+    assert type(dni.net[0]) is nn.Flatten
+    assert type(dni.layer) is nn.LazyLinear
+
+    # Check net
+    assert len(dni.net) == 3
 
 
 def test_conv2d_dni_init(conv2d_dni_builder):
@@ -163,6 +203,44 @@ def test_linear_dni_forward(linear_dni_builder, device, eval):
         )
     else:
         assert torch.count_nonzero(dni.elig_eps).item() == 0
+
+
+@pytest.mark.parametrize("eval", [True, False])
+def test_lazy_linear_dni_forward(lazy_linear_dni_builder, device, eval):
+    """Test the forward() function of a DNI instance built with LinearDNIBuilder"""
+    # Batch size
+    B = 16
+    c, w, h = 3, 10, 10
+    x = torch.randn((B, c, w, h), device=device)
+
+    dni = DNI(lazy_linear_dni_builder).to(device)
+
+    if eval:
+        dni.eval()
+        assert dni.training is False
+
+    out = dni(x)
+    assert out.shape[0] == B
+    assert out.shape[1] == lazy_linear_dni_builder.out_features
+    if type(dni.activation) is snntorch.Leaky and dni.training:
+        assert torch.equal(
+            dni.elig_eps,
+            torch.mean(x.reshape(B, -1), axis=0)
+            .unsqueeze(0)
+            .expand((dni.layer.out_features, -1)),
+        )
+        elig_eps_prev = dni.elig_eps
+        x_new = torch.randn((B, c, w, h), device=device)
+        _ = dni(x_new)
+        assert torch.equal(
+            dni.elig_eps,
+            dni.activation.beta * elig_eps_prev
+            + torch.mean(x_new.reshape(B, -1), axis=0)
+            .unsqueeze(0)
+            .expand((dni.layer.out_features, -1)),
+        )
+    else:
+        assert torch.equal(dni.elig_eps, torch.zeros(1, device=device))
 
 
 @pytest.mark.parametrize("eval", [True, False])

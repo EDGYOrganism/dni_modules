@@ -1,19 +1,18 @@
 from itertools import product
 
 import pytest
-
-import torch
-import torch.nn as nn
 import snntorch
+import torch
+from torch import nn
 
 from dni_modules import (
-    DNIBuilder,
-    LinearDNIBuilder,
     Conv2dDNIBuilder,
-    ReLUActivationBuilder,
+    DNIBuilder,
+    LazyLinearDNIBuilder,
     LeakyActivationBuilder,
+    LinearDNIBuilder,
+    ReLUActivationBuilder,
 )
-
 
 LINEAR_DNI_BUILDER_TEST_CASES = list(
     product(
@@ -26,6 +25,19 @@ LINEAR_DNI_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
         [True, False],  # batch_norm
+    )
+)
+
+
+LAZY_LINEAR_DNI_BUILDER_TEST_CASES = list(
+    product(
+        [10, 20],  # out_features
+        [True, False],  # bias
+        [
+            ReLUActivationBuilder(),
+            LeakyActivationBuilder(),
+            LeakyActivationBuilder(beta=0.8, threshold=0.5),
+        ],  # activation_builder
     )
 )
 
@@ -65,7 +77,7 @@ def test_dni_builder_raises_error():
 def test_linear_dni_builder_init(
     in_features, out_features, bias, activation_builder, batch_norm
 ):
-    """Test the __init__ function of LinearDNIBuiler class"""
+    """Test the __init__ function of LinearDNIBuilder class"""
     builder = LinearDNIBuilder(
         in_features=in_features,
         out_features=out_features,
@@ -87,7 +99,7 @@ def test_linear_dni_builder_init(
 def test_linear_dni_builder_build(
     in_features, out_features, bias, activation_builder, batch_norm
 ):
-    """Test the build() function of LinearDNIBuiler class"""
+    """Test the build() function of LinearDNIBuilder class"""
     builder = LinearDNIBuilder(
         in_features=in_features,
         out_features=out_features,
@@ -112,6 +124,52 @@ def test_linear_dni_builder_build(
         assert dni[i].num_features == out_features
         i += 1
 
+    if type(activation_builder) is LeakyActivationBuilder:
+        assert type(dni[i]) is snntorch.Leaky
+        assert torch.isclose(dni[i].beta, torch.tensor(builder.activation_builder.beta))
+        assert torch.isclose(
+            dni[i].threshold, torch.tensor(builder.activation_builder.threshold)
+        )
+
+
+@pytest.mark.parametrize(
+    "out_features, bias, activation_builder",
+    LAZY_LINEAR_DNI_BUILDER_TEST_CASES,
+)
+def test_lazy_linear_dni_builder_init(out_features, bias, activation_builder):
+    """Test the __init__ function of LazyLinearDNIBuilder class"""
+    builder = LazyLinearDNIBuilder(
+        out_features=out_features,
+        bias=bias,
+        activation_builder=activation_builder,
+    )
+    assert builder.out_features == out_features
+    assert builder.bias == bias
+    assert type(builder.activation_builder) is type(activation_builder)
+
+
+@pytest.mark.parametrize(
+    "out_features, bias, activation_builder",
+    LAZY_LINEAR_DNI_BUILDER_TEST_CASES,
+)
+def test_lazy_linear_dni_builder_build(out_features, bias, activation_builder):
+    """Test the build() function of LazyLinearDNIBuilder class"""
+    builder = LazyLinearDNIBuilder(
+        out_features=out_features,
+        bias=bias,
+        activation_builder=activation_builder,
+    )
+    dni = builder.build()
+    i = 0  # layer index
+    assert len(dni) == 3
+    assert type(dni[i]) is nn.Flatten
+    i += 1
+    if bias is True:
+        assert dni[i].bias is not None
+    else:
+        assert dni[i].bias is None
+
+    i += 1
     if type(activation_builder) is LeakyActivationBuilder:
         assert type(dni[i]) is snntorch.Leaky
         assert torch.isclose(dni[i].beta, torch.tensor(builder.activation_builder.beta))
@@ -150,8 +208,7 @@ def test_conv2d_dni_builder_init(
             activation_builder=activation_builder,
             batch_norm=batch_norm,
         )
-    except Exception as e:
-        assert isinstance(e, ValueError)
+    except ValueError as e:
         assert str(e) == f"Even convolution kernel sizes not supported: {kernel_size}"
     else:
         assert builder.in_channels == in_channels
@@ -163,7 +220,7 @@ def test_conv2d_dni_builder_init(
         assert builder.pooling_kernel_size == pooling_kernel_size
         assert builder.bias == bias
         assert type(builder.activation_builder) is type(activation_builder)
-        assert batch_norm == batch_norm
+        assert builder.batch_norm == batch_norm
 
 
 @pytest.mark.parametrize(
@@ -196,8 +253,7 @@ def test_conv2d_dni_builder_build(
             activation_builder=activation_builder,
             batch_norm=batch_norm,
         )
-    except Exception as e:
-        assert isinstance(e, ValueError)
+    except ValueError as e:
         assert str(e) == f"Even convolution kernel sizes not supported: {kernel_size}"
     else:
         dni = builder.build()

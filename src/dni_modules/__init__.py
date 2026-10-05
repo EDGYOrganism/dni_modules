@@ -1,6 +1,6 @@
 """Network modules for experiments with Decoupled Neural Intefaces."""
 
-from .dni_builder import DNIBuilder, LinearDNIBuilder, Conv2dDNIBuilder
+from .dni_builder import DNIBuilder, LinearDNIBuilder, LazyLinearDNIBuilder, Conv2dDNIBuilder
 from .activation_builder import (
     ActivationBuilder,
     ReLUActivationBuilder,
@@ -19,6 +19,7 @@ from .decoupled_net import LinearDecoupledNet, Conv2dDecoupledNet
 __all__ = [
     "DNIBuilder",
     "LinearDNIBuilder",
+    "LazyLinearDNIBuilder",
     "Conv2dDNIBuilder",
     "ActivationBuilder",
     "ReLUActivationBuilder",
