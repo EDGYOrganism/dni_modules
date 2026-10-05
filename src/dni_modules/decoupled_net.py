@@ -5,6 +5,7 @@ from dni_modules import (
     Conv2dDNIBuilder,
     Conv2dSynthGradBuilder,
     DNIBuilder,
+    LazyLinearDNIBuilder,
     LinearDNIBuilder,
     LinearSynthGradBuilder,
     SynthGrad,
@@ -204,17 +205,17 @@ class Conv2dDecoupledNet(DecoupledNet):
                 nn.ModuleDict({"dni": DNI(self.dni_builder), "synth_grad": synth_grad})
             )
 
+        # Create a LazyLinearDNIBUilder
+        lazy_dni_builder = LazyLinearDNIBuilder(
+            out_features=self.out_features,
+            bias=self.dni_builder.bias,
+            activation_builder=self.dni_builder.activation_builder,
+        )
+
         self.arch.append(
             nn.ModuleDict(
                 {
-                    "dni": nn.Sequential(
-                        nn.Flatten(),  # Flatten the output of the last hidden DNI to pass it to a linear layer
-                        nn.LazyLinear(
-                            out_features=self.out_features,
-                            bias=self.dni_builder.bias,
-                        ),
-                        self.dni_builder.activation_builder.build(),
-                    ),
+                    "dni": DNI(lazy_dni_builder),
                     "synth_grad": SynthGrad(self.synth_grad_builder),
                 }
             )

@@ -185,7 +185,7 @@ def test_conv2d_decoupled_net_init(
                 )
 
             # Check output DNI layer
-            assert net.arch[-1]["dni"][1].out_features == out_features
+            assert net.arch[-1]["dni"].layer.out_features == out_features
 
             assert (
                 net.arch[-1]["synth_grad"].net[0].in_channels
