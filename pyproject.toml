@@ -1,6 +1,6 @@
 [project]
 name = "dni-modules"
-version = "0.1.0"
+version = "0.2.0"
 description = "Decoupled Neural Interfaces package for creating Decoupled Artificial Neural Networks"
 readme = "README.md"
 license = {text = "MIT"}
