@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-import torch.nn as nn
+from torch import nn
 
 from .activation_builder import ActivationBuilder, ReLUActivationBuilder
 
@@ -30,6 +30,8 @@ class LinearSynthGradBuilder(SynthGradBuilder):
         Activation builder, by default ReLUActivationBuilder()
     num_hidden : int, optional
         Number of hidden layers, by default 1
+    output_zero_init : bool, optional
+        If set to True, the parameters of the output layer of the Synthetic Gradient module will be initialized to zero, by default False.
     """
 
     def __init__(
@@ -40,6 +42,7 @@ class LinearSynthGradBuilder(SynthGradBuilder):
         bias: bool,
         activation_builder: ActivationBuilder = ReLUActivationBuilder(),
         num_hidden: int = 1,
+        output_zero_init: bool = False,
     ):
 
         self.in_features = in_features
@@ -48,6 +51,7 @@ class LinearSynthGradBuilder(SynthGradBuilder):
         self.bias = bias
         self.activation_builder = activation_builder
         self.num_hidden = num_hidden
+        self.output_zero_init = output_zero_init
 
     def build(self):
         """Builds Linear Synthetic Gradient module.
@@ -87,10 +91,11 @@ class LinearSynthGradBuilder(SynthGradBuilder):
             )
 
         net = nn.Sequential(*layers)
-        # Initialize parameters of output layer with zeros
-        nn.init.zeros_(net[-1].weight)
-        if net[-1].bias is not None:
-            nn.init.zeros_(net[-1].bias)
+        if self.output_zero_init:
+            # Initialize parameters of output layer with zeros
+            nn.init.zeros_(net[-1].weight)
+            if net[-1].bias is not None:
+                nn.init.zeros_(net[-1].bias)
 
         return net
 
@@ -118,6 +123,8 @@ class Conv2dSynthGradBuilder(SynthGradBuilder):
         Activation builder, by default ReLUActivationBuilder()
     num_hidden : int, optional
         Number of hidden layers, by default 1
+    output_zero_init : bool, optional
+        If set to True, the parameters of the output layer of the Synthetic Gradient module will be initialized to zero, by default False.
     """
 
     def __init__(
@@ -131,6 +138,7 @@ class Conv2dSynthGradBuilder(SynthGradBuilder):
         bias: bool,
         activation_builder: ActivationBuilder = ReLUActivationBuilder(),
         num_hidden: int = 1,
+        output_zero_init: bool = False,
     ):
 
         self.in_channels = in_channels
@@ -142,6 +150,7 @@ class Conv2dSynthGradBuilder(SynthGradBuilder):
         self.bias = bias
         self.activation_builder = activation_builder
         self.num_hidden = num_hidden
+        self.output_zero_init = output_zero_init
 
     def build(self):
         """Builds Conv2d Synthetic Gradient module.
@@ -190,9 +199,10 @@ class Conv2dSynthGradBuilder(SynthGradBuilder):
             )
 
         net = nn.Sequential(*layers)
-        # Initialize parameters of output layer with zeros
-        nn.init.zeros_(net[-1].weight)
-        if net[-1].bias is not None:
-            nn.init.zeros_(net[-1].bias)
+        if self.output_zero_init:
+            # Initialize parameters of output layer with zeros
+            nn.init.zeros_(net[-1].weight)
+            if net[-1].bias is not None:
+                nn.init.zeros_(net[-1].bias)
 
         return net

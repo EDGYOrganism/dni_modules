@@ -1,17 +1,16 @@
 from itertools import product
 
 import pytest
-
-import torch
-import torch.nn as nn
 import snntorch
+import torch
+from torch import nn
 
 from dni_modules import (
-    SynthGradBuilder,
-    LinearSynthGradBuilder,
     Conv2dSynthGradBuilder,
-    ReLUActivationBuilder,
     LeakyActivationBuilder,
+    LinearSynthGradBuilder,
+    ReLUActivationBuilder,
+    SynthGradBuilder,
 )
 
 LINEAR_SYNTH_GRAD_BUILDER_TEST_CASES = list(
@@ -26,6 +25,7 @@ LINEAR_SYNTH_GRAD_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(beta=0.8, threshold=0.8),
         ],  # activation_builder
         [0, 1, 2],  # num_hidden
+        [True, False],  # output_zero_init
     )
 )
 
@@ -44,6 +44,7 @@ CONV2D_SYNTH_GRAD_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
         [0, 1, 2],  # num_hidden
+        [True, False],  # output_zero_init
     )
 )
 
@@ -55,11 +56,17 @@ def test_synth_grad_builder_raises_error():
 
 
 @pytest.mark.parametrize(
-    "in_features, out_features, hidden_layer_size, bias, activation_builder, num_hidden",
+    "in_features, out_features, hidden_layer_size, bias, activation_builder, num_hidden, output_zero_init",
     LINEAR_SYNTH_GRAD_BUILDER_TEST_CASES,
 )
 def test_linear_synth_grad_builder_init(
-    in_features, out_features, hidden_layer_size, bias, activation_builder, num_hidden
+    in_features,
+    out_features,
+    hidden_layer_size,
+    bias,
+    activation_builder,
+    num_hidden,
+    output_zero_init,
 ):
     """Test __init__ function of LinearSynthGradBuilder class"""
     builder = LinearSynthGradBuilder(
@@ -69,6 +76,7 @@ def test_linear_synth_grad_builder_init(
         bias=bias,
         activation_builder=activation_builder,
         num_hidden=num_hidden,
+        output_zero_init=output_zero_init,
     )
 
     assert builder.in_features == in_features
@@ -76,15 +84,22 @@ def test_linear_synth_grad_builder_init(
     assert builder.hidden_layer_size == hidden_layer_size
     assert builder.bias == bias
     assert type(builder.activation_builder) is type(activation_builder)
-    assert num_hidden == num_hidden
+    assert builder.num_hidden == num_hidden
+    assert builder.output_zero_init == output_zero_init
 
 
 @pytest.mark.parametrize(
-    "in_features, out_features, hidden_layer_size, bias, activation_builder, num_hidden",
+    "in_features, out_features, hidden_layer_size, bias, activation_builder, num_hidden, output_zero_init",
     LINEAR_SYNTH_GRAD_BUILDER_TEST_CASES,
 )
 def test_linear_synth_grad_builder_build(
-    in_features, out_features, hidden_layer_size, bias, activation_builder, num_hidden
+    in_features,
+    out_features,
+    hidden_layer_size,
+    bias,
+    activation_builder,
+    num_hidden,
+    output_zero_init,
 ):
     """Test build() function of LinearSynthGradBuilder class"""
     builder = LinearSynthGradBuilder(
@@ -94,6 +109,7 @@ def test_linear_synth_grad_builder_build(
         bias=bias,
         activation_builder=activation_builder,
         num_hidden=num_hidden,
+        output_zero_init=output_zero_init,
     )
 
     synth_grad = builder.build()
@@ -117,14 +133,15 @@ def test_linear_synth_grad_builder_build(
                 assert type(synth_grad[3 * i + 2]) is nn.ReLU
         assert synth_grad[-1].weight.shape == (out_features, hidden_layer_size)
 
-    # Check output layer parameters are initialized to zero
-    assert torch.count_nonzero(synth_grad[-1].weight).item() == 0
-    if bias:
-        assert torch.count_nonzero(synth_grad[-1].bias).item() == 0
+    if builder.output_zero_init:
+        # Check output layer parameters are initialized to zero
+        assert torch.count_nonzero(synth_grad[-1].weight).item() == 0
+        if bias:
+            assert torch.count_nonzero(synth_grad[-1].bias).item() == 0
 
 
 @pytest.mark.parametrize(
-    "in_channels, out_channels, hidden_layer_channels, kernel_size, stride, padding, bias, activation_builder, num_hidden",
+    "in_channels, out_channels, hidden_layer_channels, kernel_size, stride, padding, bias, activation_builder, num_hidden, output_zero_init",
     CONV2D_SYNTH_GRAD_BUILDER_TEST_CASES,
 )
 def test_conv2d_synth_grad_builder_init(
@@ -137,6 +154,7 @@ def test_conv2d_synth_grad_builder_init(
     bias,
     activation_builder,
     num_hidden,
+    output_zero_init,
 ):
     """Test __init__ function of Conv2dSynthGradBuilder class"""
     builder = Conv2dSynthGradBuilder(
@@ -149,6 +167,7 @@ def test_conv2d_synth_grad_builder_init(
         bias=bias,
         activation_builder=activation_builder,
         num_hidden=num_hidden,
+        output_zero_init=output_zero_init,
     )
 
     assert builder.in_channels == in_channels
@@ -160,10 +179,11 @@ def test_conv2d_synth_grad_builder_init(
     assert builder.bias == bias
     assert type(builder.activation_builder) is type(activation_builder)
     assert builder.num_hidden == num_hidden
+    assert builder.output_zero_init == output_zero_init
 
 
 @pytest.mark.parametrize(
-    "in_channels, out_channels, hidden_layer_channels, kernel_size, stride, padding, bias, activation_builder, num_hidden",
+    "in_channels, out_channels, hidden_layer_channels, kernel_size, stride, padding, bias, activation_builder, num_hidden, output_zero_init",
     CONV2D_SYNTH_GRAD_BUILDER_TEST_CASES,
 )
 def test_conv2d_synth_grad_builder_build(
@@ -176,6 +196,7 @@ def test_conv2d_synth_grad_builder_build(
     bias,
     activation_builder,
     num_hidden,
+    output_zero_init,
 ):
     """Test build() function of Conv2dSynthGradBuilder class"""
     builder = Conv2dSynthGradBuilder(
@@ -188,6 +209,7 @@ def test_conv2d_synth_grad_builder_build(
         bias=bias,
         activation_builder=activation_builder,
         num_hidden=num_hidden,
+        output_zero_init=output_zero_init,
     )
 
     synth_grad = builder.build()
@@ -227,7 +249,8 @@ def test_conv2d_synth_grad_builder_build(
             kernel_size,
         )
 
-    # Check output layer parameters are initialized to zero
-    assert torch.count_nonzero(synth_grad[-1].weight).item() == 0
-    if bias:
-        assert torch.count_nonzero(synth_grad[-1].bias).item() == 0
+    if builder.output_zero_init:
+        # Check output layer parameters are initialized to zero
+        assert torch.count_nonzero(synth_grad[-1].weight).item() == 0
+        if bias:
+            assert torch.count_nonzero(synth_grad[-1].bias).item() == 0

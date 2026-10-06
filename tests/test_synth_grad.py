@@ -1,17 +1,15 @@
 from itertools import product
 
 import pytest
-
 import torch
 
 from dni_modules import (
-    SynthGrad,
-    LinearSynthGradBuilder,
     Conv2dSynthGradBuilder,
-    ReLUActivationBuilder,
     LeakyActivationBuilder,
+    LinearSynthGradBuilder,
+    ReLUActivationBuilder,
+    SynthGrad,
 )
-
 
 LINEAR_SYNTH_GRAD_BUILDER_TEST_CASES = list(
     product(
@@ -25,6 +23,7 @@ LINEAR_SYNTH_GRAD_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(beta=0.8, threshold=0.8),
         ],  # activation_builder
         [1, 2],  # num_hidden
+        [True, False],  # output_zero_init
     )
 )
 
@@ -43,6 +42,7 @@ CONV2D_SYNTH_GRAD_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
         [0, 1, 2],  # num_hidden
+        [True, False],  # output_zero_init
     )
 )
 
@@ -71,6 +71,7 @@ def linear_synth_grad_builder(linear_synth_grad_builder_test_cases):
         bias,
         activation_builder,
         num_hidden,
+        output_zero_init,
     ) = linear_synth_grad_builder_test_cases
     return LinearSynthGradBuilder(
         in_features=in_features,
@@ -79,6 +80,7 @@ def linear_synth_grad_builder(linear_synth_grad_builder_test_cases):
         bias=bias,
         activation_builder=activation_builder,
         num_hidden=num_hidden,
+        output_zero_init=output_zero_init,
     )
 
 
@@ -94,6 +96,7 @@ def conv2d_synth_grad_builder(conv2d_synth_grad_builder_test_cases):
         bias,
         activation_builder,
         num_hidden,
+        output_zero_init,
     ) = conv2d_synth_grad_builder_test_cases
 
     return Conv2dSynthGradBuilder(
@@ -106,6 +109,7 @@ def conv2d_synth_grad_builder(conv2d_synth_grad_builder_test_cases):
         bias=bias,
         activation_builder=activation_builder,
         num_hidden=num_hidden,
+        output_zero_init=output_zero_init,
     )
 
 
@@ -136,6 +140,9 @@ def test_linear_synth_grad_forward(linear_synth_grad_builder, device):
     assert out.shape[0] == B
     assert out.shape[1] == linear_synth_grad_builder.out_features
 
+    if linear_synth_grad_builder.output_zero_init:
+        assert torch.count_nonzero(out).item() == 0
+
 
 def test_conv2d_synth_grad_forward(conv2d_synth_grad_builder, device):
     """Test the forward() function of a SynthGrad class instance built with Conv2dSynthGradBuilder"""
@@ -153,3 +160,6 @@ def test_conv2d_synth_grad_forward(conv2d_synth_grad_builder, device):
     if conv2d_synth_grad_builder.padding == "same":
         assert out.shape[2] == height
         assert out.shape[3] == width
+
+    if conv2d_synth_grad_builder.output_zero_init:
+        assert torch.count_nonzero(out).item() == 0
