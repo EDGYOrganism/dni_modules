@@ -104,3 +104,7 @@ class DNI(nn.Module):
                     self.elig_eps = self.activation.beta * self.elig_eps + dv
 
         return out
+
+    def clear_elig_eps(self):
+        """Sets eligibility traces epsilon to zero."""
+        self.elig_eps = torch.zeros_like(self.elig_eps)

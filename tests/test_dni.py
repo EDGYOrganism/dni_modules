@@ -1,20 +1,18 @@
 from itertools import product
 
 import pytest
-
-import torch
-import torch.nn as nn
 import snntorch
+import torch
+from torch import nn
 
 from dni_modules import (
     DNI,
-    LinearDNIBuilder,
-    LazyLinearDNIBuilder,
     Conv2dDNIBuilder,
-    ReLUActivationBuilder,
+    LazyLinearDNIBuilder,
     LeakyActivationBuilder,
+    LinearDNIBuilder,
+    ReLUActivationBuilder,
 )
-
 
 LINEAR_DNI_BUILDER_TEST_CASES = list(
     product(
@@ -292,4 +290,53 @@ def test_conv2d_dni_forward(conv2d_dni_builder, device, B, eval):
 
         assert torch.equal(dni.elig_eps, dv.expand(dni.layer.out_channels, -1, -1, -1))
     else:
+        assert torch.count_nonzero(dni.elig_eps).item() == 0
+
+
+def test_linear_dni_clear_elig_eps(linear_dni_builder, device):
+    """Test clear_elig_eps() function of a DNI instance built with LinearDNIBuilder"""
+    # Batch size
+    B = 4
+    x = torch.randn((B, linear_dni_builder.in_features), device=device)
+
+    dni = DNI(linear_dni_builder).to(device)
+    _ = dni(x)
+    if type(dni.activation) is snntorch.Leaky:
+        assert torch.count_nonzero(dni.elig_eps).item() > 0
+
+        # Clear eligibility traces
+        dni.clear_elig_eps()
+        assert torch.count_nonzero(dni.elig_eps).item() == 0
+
+
+def test_lazy_linear_dni_clear_elig_eps(lazy_linear_dni_builder, device):
+    """Test clear_elig_eps() function of a DNI instance built with LazyLinearDNIBuilder"""
+    # Batch size
+    B = 16
+    c, w, h = 3, 10, 10
+    x = torch.randn((B, c, w, h), device=device)
+
+    dni = DNI(lazy_linear_dni_builder).to(device)
+    _ = dni(x)
+    if type(dni.activation) is snntorch.Leaky:
+        assert torch.count_nonzero(dni.elig_eps).item() > 0
+
+        # Clear eligibility traces
+        dni.clear_elig_eps()
+        assert torch.count_nonzero(dni.elig_eps).item() == 0
+
+
+@pytest.mark.parametrize("B", [1, 4])  # Batch size
+def test_conv2d_dni_clear_elig_eps(conv2d_dni_builder, device, B):
+    """Test clear_elig_eps() function of a DNI instance built with Conv2dDNIBuilder"""
+    height, width = (9, 9)
+    x = torch.randn((B, conv2d_dni_builder.in_channels, height, width), device=device)
+
+    dni = DNI(conv2d_dni_builder).to(device)
+    _ = dni(x)
+    if type(dni.activation) is snntorch.Leaky:
+        assert torch.count_nonzero(dni.elig_eps).item() > 0
+
+        # Clear eligibility traces
+        dni.clear_elig_eps()
         assert torch.count_nonzero(dni.elig_eps).item() == 0
