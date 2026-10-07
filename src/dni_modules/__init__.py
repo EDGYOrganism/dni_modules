@@ -16,6 +16,8 @@ from .synth_grad import SynthGrad
 
 from .decoupled_net import LinearDecoupledNet, Conv2dDecoupledNet
 
+from .surrogate_functions import SurrogateGrad, ATan, ATanSurrogate, Triangle, TriangleSurrogate
+
 __all__ = [
     "DNIBuilder",
     "LinearDNIBuilder",
@@ -30,5 +32,10 @@ __all__ = [
     "DNI",
     "SynthGrad",
     "LinearDecoupledNet",
-    "Conv2dDecoupledNet"
+    "Conv2dDecoupledNet",
+    "SurrogateGrad",
+    "ATan",
+    "ATanSurrogate",
+    "Triangle",
+    "TriangleSurrogate"
 ]
