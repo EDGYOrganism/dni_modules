@@ -36,6 +36,14 @@ dni\_modules.dni\_builder
    :show-inheritance:
    :undoc-members:
 
+dni\_modules.surrogate\_functions
+---------------------------------
+
+.. automodule:: dni_modules.surrogate_functions
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dni\_modules.synth\_grad
 ------------------------
 
