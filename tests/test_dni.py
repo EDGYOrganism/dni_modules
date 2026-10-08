@@ -184,23 +184,6 @@ def test_linear_dni_forward(linear_dni_builder, device, eval):
     out = dni(x)
     assert out.shape[0] == B
     assert out.shape[1] == linear_dni_builder.out_features
-    if type(dni.activation) is snntorch.Leaky and dni.training:
-        assert torch.equal(
-            dni.elig_eps,
-            torch.mean(x, axis=0).unsqueeze(0).expand((dni.layer.out_features, -1)),
-        )
-        elig_eps_prev = dni.elig_eps
-        x_new = torch.randn((B, linear_dni_builder.in_features), device=device)
-        _ = dni(x_new)
-        assert torch.equal(
-            dni.elig_eps,
-            dni.activation.beta * elig_eps_prev
-            + torch.mean(x_new, axis=0)
-            .unsqueeze(0)
-            .expand((dni.layer.out_features, -1)),
-        )
-    else:
-        assert torch.count_nonzero(dni.elig_eps).item() == 0
 
 
 @pytest.mark.parametrize("eval", [True, False])
@@ -220,25 +203,6 @@ def test_lazy_linear_dni_forward(lazy_linear_dni_builder, device, eval):
     out = dni(x)
     assert out.shape[0] == B
     assert out.shape[1] == lazy_linear_dni_builder.out_features
-    if type(dni.activation) is snntorch.Leaky and dni.training:
-        assert torch.equal(
-            dni.elig_eps,
-            torch.mean(x.reshape(B, -1), axis=0)
-            .unsqueeze(0)
-            .expand((dni.layer.out_features, -1)),
-        )
-        elig_eps_prev = dni.elig_eps
-        x_new = torch.randn((B, c, w, h), device=device)
-        _ = dni(x_new)
-        assert torch.equal(
-            dni.elig_eps,
-            dni.activation.beta * elig_eps_prev
-            + torch.mean(x_new.reshape(B, -1), axis=0)
-            .unsqueeze(0)
-            .expand((dni.layer.out_features, -1)),
-        )
-    else:
-        assert torch.equal(dni.elig_eps, torch.zeros(1, device=device))
 
 
 @pytest.mark.parametrize("eval", [True, False])
@@ -259,7 +223,77 @@ def test_conv2d_dni_forward(conv2d_dni_builder, device, B, eval):
     if conv2d_dni_builder.padding == "same":
         assert out.shape[2] == int(height / conv2d_dni_builder.pooling_kernel_size)
         assert out.shape[3] == int(width / conv2d_dni_builder.pooling_kernel_size)
-    if type(dni.activation) is snntorch.Leaky and dni.training:
+
+
+def test_linear_dni_update_elig_eps(linear_dni_builder, device):
+    """Test the update_elig_eps() function of a DNI instance built with LinearDNIBuilder"""
+    # Batch size
+    B = 4
+    x = torch.randn((B, linear_dni_builder.in_features), device=device)
+
+    dni = DNI(linear_dni_builder).to(device)
+    _ = dni(x)
+
+    if type(dni.activation) is snntorch.Leaky:
+        dni.update_elig_eps(x)
+        assert torch.equal(
+            dni.elig_eps,
+            torch.mean(x, axis=0).unsqueeze(0).expand((dni.layer.out_features, -1)),
+        )
+        elig_eps_prev = dni.elig_eps
+
+        x_new = torch.randn((B, linear_dni_builder.in_features), device=device)
+        dni.update_elig_eps(x_new)
+        assert torch.equal(
+            dni.elig_eps,
+            dni.activation.beta * elig_eps_prev
+            + torch.mean(x_new, axis=0)
+            .unsqueeze(0)
+            .expand((dni.layer.out_features, -1)),
+        )
+
+
+def test_lazy_linear_dni_update_elig_eps(lazy_linear_dni_builder, device):
+    """Test the update_elig_eps() function of a DNI instance built with LazyLinearDNIBuilder"""
+    # Batch size
+    B = 16
+    c, w, h = 3, 10, 10
+    x = torch.randn((B, c, w, h), device=device)
+
+    dni = DNI(lazy_linear_dni_builder).to(device)
+    _ = dni(x)
+
+    if type(dni.activation) is snntorch.Leaky:
+        dni.update_elig_eps(x)
+        assert torch.equal(
+            dni.elig_eps,
+            torch.mean(x.reshape(B, -1), axis=0)
+            .unsqueeze(0)
+            .expand((dni.layer.out_features, -1)),
+        )
+        elig_eps_prev = dni.elig_eps
+
+        x_new = torch.randn((B, c, w, h), device=device)
+        dni.update_elig_eps(x_new)
+        assert torch.equal(
+            dni.elig_eps,
+            dni.activation.beta * elig_eps_prev
+            + torch.mean(x_new.reshape(B, -1), axis=0)
+            .unsqueeze(0)
+            .expand((dni.layer.out_features, -1)),
+        )
+
+
+@pytest.mark.parametrize("B", [1, 4])  # Batch size
+def test_conv2d_dni_update_elig_eps(conv2d_dni_builder, device, B):
+    """Test the update_elig_eps() function of a DNI instance built with Conv2dDNIBuilder"""
+    height, width = (9, 9)
+    x = torch.randn((B, conv2d_dni_builder.in_channels, height, width), device=device)
+
+    dni = DNI(conv2d_dni_builder).to(device)
+
+    if type(dni.activation) is snntorch.Leaky:
+        dni.update_elig_eps(x)
         # If padding has been set to "same" and kernel_size is odd, manually compute padding because unfold() function cannot accept string "same" for padding parameter.
         if dni.layer.padding == "same" and dni.layer.kernel_size[0] % 2 == 1:
             padding = dni.layer.kernel_size[0] // 2
@@ -289,8 +323,6 @@ def test_conv2d_dni_forward(conv2d_dni_builder, device, B, eval):
         dv = torch.mean(x_unfold, axis=0)  # Shape: (1, c_in, k, k)
 
         assert torch.equal(dni.elig_eps, dv.expand(dni.layer.out_channels, -1, -1, -1))
-    else:
-        assert torch.count_nonzero(dni.elig_eps).item() == 0
 
 
 def test_linear_dni_clear_elig_eps(linear_dni_builder, device):
@@ -300,8 +332,9 @@ def test_linear_dni_clear_elig_eps(linear_dni_builder, device):
     x = torch.randn((B, linear_dni_builder.in_features), device=device)
 
     dni = DNI(linear_dni_builder).to(device)
-    _ = dni(x)
+
     if type(dni.activation) is snntorch.Leaky:
+        dni.update_elig_eps(x)
         assert torch.count_nonzero(dni.elig_eps).item() > 0
 
         # Clear eligibility traces
@@ -318,7 +351,9 @@ def test_lazy_linear_dni_clear_elig_eps(lazy_linear_dni_builder, device):
 
     dni = DNI(lazy_linear_dni_builder).to(device)
     _ = dni(x)
+    assert torch.count_nonzero(dni.elig_eps).item() == 0
     if type(dni.activation) is snntorch.Leaky:
+        dni.update_elig_eps(x)
         assert torch.count_nonzero(dni.elig_eps).item() > 0
 
         # Clear eligibility traces
@@ -333,10 +368,110 @@ def test_conv2d_dni_clear_elig_eps(conv2d_dni_builder, device, B):
     x = torch.randn((B, conv2d_dni_builder.in_channels, height, width), device=device)
 
     dni = DNI(conv2d_dni_builder).to(device)
-    _ = dni(x)
+
     if type(dni.activation) is snntorch.Leaky:
+        dni.update_elig_eps(x)
         assert torch.count_nonzero(dni.elig_eps).item() > 0
 
         # Clear eligibility traces
         dni.clear_elig_eps()
         assert torch.count_nonzero(dni.elig_eps).item() == 0
+
+
+def test_linear_dni_update_dni_parameters(linear_dni_builder, device):
+    """Test the update_dni_parameters() function of a DNI instance built with LinearDNIBuilder"""
+    # Batch size
+    B = 4
+    x = torch.randn((B, linear_dni_builder.in_features), device=device)
+    synth_delta = torch.randn((B, linear_dni_builder.out_features), device=device)
+    lr = 0.01
+
+    dni = DNI(linear_dni_builder).to(device)
+    _ = dni(x)
+
+    weight = dni.layer.weight.clone()
+    if dni.layer.bias is not None:
+        bias = dni.layer.bias.clone()
+
+    dni.update_dni_parameters(x, synth_delta, lr)
+
+    if type(dni.activation) is nn.ReLU:
+        batched_grad = torch.einsum(
+            "bi,bj->bij", synth_delta, x
+        )  # shape (B, H_{out}, H_{in})
+        weight_new = weight - (lr * torch.mean(batched_grad, axis=0))
+        if dni.layer.bias is not None:
+            bias_new = bias - (lr * torch.mean(synth_delta, axis=0))
+            assert torch.equal(dni.layer.bias, bias_new)
+
+        assert torch.equal(dni.layer.weight, weight_new)
+
+    if type(dni.activation) is snntorch.Leaky:
+        sur_grad = dni.activation.spike_grad.surrogate_grad(
+            dni.activation.mem - dni.activation.threshold
+        )
+        weight_new = weight - (
+            lr * torch.mean(sur_grad * synth_delta, axis=0).unsqueeze(1) * dni.elig_eps
+        )
+
+        assert torch.equal(dni.layer.weight, weight_new)
+
+
+def test_lazy_linear_dni_update_dni_parameters(lazy_linear_dni_builder, device):
+    """Test the update_dni_parameters() function of a DNI instance built with LazyLinearDNIBuilder"""
+    # Batch size
+    B = 16
+    c, w, h = 3, 10, 10
+    x = torch.randn((B, c, w, h), device=device)
+    synth_delta = torch.randn((B, lazy_linear_dni_builder.out_features), device=device)
+    lr = 0.01
+
+    dni = DNI(lazy_linear_dni_builder).to(device)
+    _ = dni(x)
+
+    weight = dni.layer.weight.clone()
+    if dni.layer.bias is not None:
+        bias = dni.layer.bias.clone()
+
+    dni.update_dni_parameters(x, synth_delta, lr)
+
+    if type(dni.activation) is nn.ReLU:
+        x_flat = x.reshape((x.shape[0], -1))
+        batched_grad = torch.einsum(
+            "bi,bj->bij", synth_delta, x_flat
+        )  # shape (B, H_{out}, H_{in})
+        weight_new = weight - (lr * torch.mean(batched_grad, axis=0))
+        if dni.layer.bias is not None:
+            bias_new = bias - (lr * torch.mean(synth_delta, axis=0))
+            assert torch.equal(dni.layer.bias, bias_new)
+
+        assert torch.equal(dni.layer.weight, weight_new)
+
+    if type(dni.activation) is snntorch.Leaky:
+        sur_grad = dni.activation.spike_grad.surrogate_grad(
+            dni.activation.mem - dni.activation.threshold
+        )
+        weight_new = weight - (
+            lr * torch.mean(sur_grad * synth_delta, axis=0).unsqueeze(1) * dni.elig_eps
+        )
+
+        assert torch.equal(dni.layer.weight, weight_new)
+
+
+@pytest.mark.parametrize("B", [1, 4])  # Batch size
+def test_conv2d_dni_update_dni_parameters_raises_error(conv2d_dni_builder, device, B):
+    """Test the update_dni_parameters() function of a DNI instance built with Conv2dDNIBuilder raises error"""
+    height, width = (9, 9)
+    x = torch.randn((B, conv2d_dni_builder.in_channels, height, width), device=device)
+
+    dni = DNI(conv2d_dni_builder).to(device)
+    synth_delta = torch.randn((1), device=device)  # Dummy synth_delta for test
+    lr = 0.01
+
+    with pytest.raises(NotImplementedError) as error:
+        dni.update_dni_parameters(x, synth_delta, lr)
+
+    assert (
+        str(error.value)
+        == "DNI parameter updates are currently only supported for DNIs with a linear layer."
+    )
