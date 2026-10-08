@@ -233,13 +233,14 @@ def test_conv2d_decoupled_net_forward(
         T = 2
         x = torch.randn((T, B, in_channels, 80, 80), device=device)
 
-        with torch.inference_mode():
-            out = net(x)
+        targets = torch.randint(low=0, high=out_features, size=(B,), device=device)
+        lr = 0.01
+        loss_fn = nn.MSELoss(reduction="sum")
 
-        assert out.shape == (T, B, out_features)
-        del x
-        del out
-        del net
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch._C._cuda_clearCublasWorkspaces()
+        with pytest.raises(NotImplementedError) as error:
+            _ = net(x, targets, lr, loss_fn)
+
+        assert (
+            str(error.value)
+            == "forward() function for Conv2dDecoupledNet has not been implemented yet."
+        )

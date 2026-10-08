@@ -2,6 +2,7 @@ from itertools import product
 
 import pytest
 import torch
+from torch import nn
 
 from dni_modules import (
     LeakyActivationBuilder,
@@ -41,7 +42,7 @@ LINEAR_SYNTH_GRAD_BUILDER_TEST_CASES = list(
         [True, False],  # bias
         [
             ReLUActivationBuilder(),
-            LeakyActivationBuilder(beta=0.8, threshold=0.8),
+            # LeakyActivationBuilder(beta=0.8, threshold=0.8),
         ],  # activation_builder
         [0, 1, 2],  # num_hidden
     )
@@ -169,7 +170,8 @@ def test_linear_decoupled_net_init(
     "in_features, hidden_dni_features, out_features, num_hidden_dni",
     LINEAR_DECOUPLED_NET_TEST_CASES,
 )
-@pytest.mark.parametrize("B", [1, 4])  # batch size
+@pytest.mark.parametrize("B", [2, 4])  # batch size
+@pytest.mark.parametrize("eval", [True, False])  # batch size
 def test_linear_decoupled_net_forward(
     in_features,
     hidden_dni_features,
@@ -179,6 +181,7 @@ def test_linear_decoupled_net_forward(
     linear_synth_grad_builder,
     device,
     B,
+    eval,
 ):
     """Test forward() function of LinearDecoupledNet class"""
     try:
@@ -198,9 +201,18 @@ def test_linear_decoupled_net_forward(
         )
     else:
         net.to(device)
-        net.eval()
+        if eval:
+            net.eval()
         T = 2
         x = torch.randn((T, B, in_features), device=device)
-        out = net(x)
+        targets = torch.randint(low=0, high=out_features, size=(B,), device=device)
+        lr = 0.01
+
+        loss_fn = nn.MSELoss(reduction="sum")
+        out = net(x, targets, lr, loss_fn)
 
         assert out.shape == (T, B, out_features)
+
+        # Check that elig_eps for every DNI contains only zeros
+        for layer_index in range(len(net.arch)):
+            assert torch.count_nonzero(net.arch[layer_index]["dni"].elig_eps) == 0

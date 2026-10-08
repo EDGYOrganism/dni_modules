@@ -52,46 +52,6 @@ class DecoupledNet(nn.Module):
 
         self.arch = nn.ModuleList()
 
-    # Common forward() function for subclasses of DecoupledNet
-    def forward(self, x: torch.Tensor):
-        """Propagates input through all the DNI layers of the network.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor with shape :math:`(T, B, H_{in})` for Linear DNI and :math:`(T, B, C_{in}, H, W)` for Conv2d DNI,
-            where :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{in}` is the number of input features, :math:`C_{in}` is the number of input channels and
-            :math:`H` and :math:`W` are the input height and width.
-
-
-        Returns
-        -------
-        torch.Tensor
-            Output tensor with shape :math:`(T, B, H_{out})`, where :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{out}` is the number of output features.
-            :math:`H_{out}` is set as a parameter in the constructor of the children classes of DecoupledNet.
-        """
-
-        T = x.shape[0]
-        output = []
-
-        # Reset membrane potential for DNIs with Leaky activations
-        for layer in self.arch:
-            if type(layer["dni"].activation) is snntorch.Leaky:
-                layer["dni"].activation.reset_mem()
-                assert layer["dni"].activation.mem.numel() == 0
-
-        for t in range(T):
-            out = x[t]
-            for layer in self.arch:
-                out = layer["dni"](out)
-                # If returned output is a tuple, keep only the first element
-                # Ensures compatibility between non-spiking and spiking activations
-                if type(out) is tuple:
-                    out = out[0]
-            output.append(out)
-
-        return torch.stack(output, dim=0)
-
 
 class LinearDecoupledNet(DecoupledNet):
     """Creates a Decoupled Network consisting of linear DNIs and linear SynthGrad modules.
@@ -159,6 +119,133 @@ class LinearDecoupledNet(DecoupledNet):
                 }
             )
         )
+
+    # forward() function
+    def forward(
+        self,
+        x: torch.Tensor,
+        targets: torch.Tensor,
+        lr: float,
+        loss_fn,
+    ):
+        """Propagates input through all the DNI layers of the LinearDecoupledNet. If LinearDecoupledNet is in training mode, DNI and SynthGrad parameters are updated.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor with shape :math:`(T, B, H_{in})`,
+            where  :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{in}` is the number of input features.
+        targets : torch.Tensor
+            Label tensor with shape :math:`(B,)`:
+        lr : float,
+            Learning rate
+        loss_fn :
+            Output loss function
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor with shape :math:`(T, B, H_{out})`, where :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{out}` is the number of output features.
+        """
+
+        T = x.shape[0]
+        B = x.shape[1]
+        synth_grad_loss_fn = nn.MSELoss(reduction="sum")
+
+        y = nn.functional.one_hot(targets, num_classes=self.out_features).to(
+            torch.float
+        )
+        out = []
+
+        # Reset membrane potentials for Leaky activations
+        for layer in self.arch:
+            if type(layer["dni"].activation) is snntorch.Leaky:
+                layer["dni"].activation.reset_mem()
+                assert layer["dni"].activation.mem.numel() == 0
+
+        for t in range(T):
+            z_l = self.arch[0]["dni"](x[t]).detach()
+
+            if self.training:
+                synth_delta_l = self.arch[1]["synth_grad"](
+                    z_l
+                )  # shape (B, hidden_dni_features)
+                # Update DNI
+                self.arch[0]["dni"].update_dni_parameters(x[t], synth_delta_l, lr)
+
+            for layer_index in range(len(self.arch) - 1):
+                # Compute z_{l+1}
+                z_l_plus_1 = (
+                    self.arch[layer_index + 1]["dni"](z_l).detach().requires_grad_(True)
+                )
+
+                if self.training:
+                    if layer_index < len(self.arch) - 2:
+                        synth_delta_l_plus_1 = self.arch[layer_index + 2]["synth_grad"](
+                            z_l_plus_1
+                        )
+                    else:
+                        loss = loss_fn(z_l_plus_1, y)
+                        synth_delta_l_plus_1 = torch.autograd.grad(
+                            loss, z_l_plus_1, retain_graph=False
+                        )[0]
+
+                    with torch.no_grad():
+                        # Compute f'_{l+1}(z_l)
+                        if (
+                            type(self.arch[layer_index + 1]["dni"].activation)
+                            is snntorch.Leaky
+                        ):
+                            temp_mem = self.arch[layer_index + 1]["dni"].activation.mem
+
+                        jacobian_l_plus_1 = torch.autograd.functional.jacobian(
+                            self.arch[layer_index + 1]["dni"], z_l
+                        )
+                        jacobian_l_plus_1_reshaped = jacobian_l_plus_1[
+                            torch.arange(B), :, torch.arange(B), :
+                        ]
+
+                        if (
+                            type(self.arch[layer_index + 1]["dni"].activation)
+                            is snntorch.Leaky
+                        ):
+                            self.arch[layer_index + 1]["dni"].activation.mem = temp_mem
+
+                        delta_l = torch.einsum(
+                            "bij,bi->bj",
+                            jacobian_l_plus_1_reshaped,
+                            synth_delta_l_plus_1,
+                        )  # (B, M, D) (B,  M) -> (B, D)
+
+                    # Update DNI
+                    self.arch[layer_index + 1]["dni"].update_dni_parameters(
+                        z_l, synth_delta_l_plus_1, lr
+                    )
+
+                    loss_grad = synth_grad_loss_fn(synth_delta_l, delta_l)
+                    loss_grad.backward()
+
+                    # Update SynthGrad
+                    with torch.no_grad():
+                        for param in self.arch[layer_index + 1][
+                            "synth_grad"
+                        ].parameters():
+                            if param.grad is not None:
+                                param.sub_(lr * param.grad)
+                                param.grad.zero_()
+
+                z_l = z_l_plus_1
+                if self.training:
+                    synth_delta_l = synth_delta_l_plus_1
+
+            out.append(z_l)
+
+        # Clear eligibility traces if in training mode
+        if self.training:
+            for layer in self.arch:
+                layer["dni"].clear_elig_eps()
+
+        return torch.stack(out, dim=0)
 
 
 class Conv2dDecoupledNet(DecoupledNet):
@@ -234,4 +321,31 @@ class Conv2dDecoupledNet(DecoupledNet):
                     "synth_grad": SynthGrad(self.synth_grad_builder),
                 }
             )
+        )
+
+    # forward() function
+    def forward(self, x: torch.Tensor, targets: torch.Tensor, lr: float, loss_fn):
+        """Propagates input through all the DNI layers of the Conv2dDecoupledNet. If Conv2dDecoupledNet is in training mode, DNI and SynthGrad parameters are updated
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor with shape :math:`(T, B, C_{in}, H, W)`,
+            where :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{in}` is the number of input features, :math:`C_{in}` is the number of input channels and
+            :math:`H` and :math:`W` are the input height and width.
+        targets : torch.Tensor
+            Label tensor with shape :math:`(B,)`:
+        lr : float,
+            Learning rate
+        loss_fn :
+            Output loss function
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor with shape :math:`(T, B, H_{out})`, where :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{out}` is the number of output features.
+        """
+
+        raise NotImplementedError(
+            "forward() function for Conv2dDecoupledNet has not been implemented yet."
         )
