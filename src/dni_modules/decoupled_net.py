@@ -1,3 +1,5 @@
+import snntorch
+import torch
 from torch import nn
 
 from dni_modules import (
@@ -51,31 +53,44 @@ class DecoupledNet(nn.Module):
         self.arch = nn.ModuleList()
 
     # Common forward() function for subclasses of DecoupledNet
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         """Propagates input through all the DNI layers of the network.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor with shape :math:`(B, H_{in})` for Linear DNI and :math:`(B, C_{in}, H, W)` for Conv2d DNI,
-            where :math:`B` is the batch size, :math:`H_{in}` is the number of input features, :math:`C_{in}` is the number of input channels and
+            Input tensor with shape :math:`(T, B, H_{in})` for Linear DNI and :math:`(T, B, C_{in}, H, W)` for Conv2d DNI,
+            where :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{in}` is the number of input features, :math:`C_{in}` is the number of input channels and
             :math:`H` and :math:`W` are the input height and width.
 
 
         Returns
         -------
         torch.Tensor
-            Output tensor with shape :math:`(B, H_{out})`, where :math:`B` is the batch size, :math:`H_{out}` is the number of output features.
+            Output tensor with shape :math:`(T, B, H_{out})`, where :math:`T` is the number of time steps, :math:`B` is the batch size, :math:`H_{out}` is the number of output features.
             :math:`H_{out}` is set as a parameter in the constructor of the children classes of DecoupledNet.
         """
-        out = x
+
+        T = x.shape[0]
+        output = []
+
+        # Reset membrane potential for DNIs with Leaky activations
         for layer in self.arch:
-            out = layer["dni"](out)
-            # If returned output is a tuple, keep only the first element
-            # Ensures compatibility between non-spiking and spiking activations
-            if type(out) is tuple:
-                out = out[0]
-        return out
+            if type(layer["dni"].activation) is snntorch.Leaky:
+                layer["dni"].activation.reset_mem()
+                assert layer["dni"].activation.mem.numel() == 0
+
+        for t in range(T):
+            out = x[t]
+            for layer in self.arch:
+                out = layer["dni"](out)
+                # If returned output is a tuple, keep only the first element
+                # Ensures compatibility between non-spiking and spiking activations
+                if type(out) is tuple:
+                    out = out[0]
+            output.append(out)
+
+        return torch.stack(output, dim=0)
 
 
 class LinearDecoupledNet(DecoupledNet):

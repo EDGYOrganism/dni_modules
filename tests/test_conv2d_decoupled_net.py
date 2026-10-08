@@ -230,12 +230,13 @@ def test_conv2d_decoupled_net_forward(
     else:
         net.to(device)
         net.eval()
-        x = torch.randn((B, in_channels, 80, 80), device=device)
+        T = 2
+        x = torch.randn((T, B, in_channels, 80, 80), device=device)
 
         with torch.inference_mode():
             out = net(x)
 
-        assert out.shape == (B, out_features)
+        assert out.shape == (T, B, out_features)
         del x
         del out
         del net

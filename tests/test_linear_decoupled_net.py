@@ -199,7 +199,8 @@ def test_linear_decoupled_net_forward(
     else:
         net.to(device)
         net.eval()
-        x = torch.randn((B, in_features), device=device)
+        T = 2
+        x = torch.randn((T, B, in_features), device=device)
         out = net(x)
 
-        assert out.shape == (B, out_features)
+        assert out.shape == (T, B, out_features)
