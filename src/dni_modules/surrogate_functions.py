@@ -18,6 +18,8 @@ class ATan(torch.autograd.Function):
     **Backward pass:** Override Dirac Delta with the derivative of the ArcTan function
     """
 
+    generate_vmap_rule = True
+
     @staticmethod
     def surrogate_grad(x: torch.Tensor):
         """Computes ArcTan surrogate gradient.
@@ -35,7 +37,7 @@ class ATan(torch.autograd.Function):
         return 1.0 / (1.0 + (torch.pi * x).pow(2))
 
     @staticmethod
-    def forward(ctx, mem: torch.Tensor, hor_scaling: float = 1.0):
+    def forward(mem: torch.Tensor, hor_scaling: float = 1.0):
         """Forward pass
 
         Parameters
@@ -52,11 +54,16 @@ class ATan(torch.autograd.Function):
         """
         spk = torch.zeros(0, requires_grad=True)
         spk = (mem > 0).float()  # Heaviside on the forward pass
+        return spk
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        """Saves context and tensors for the backward pass."""
+        mem, hor_scaling = inputs
         ctx.save_for_backward(
             mem
         )  # Store the membrane and hor_scaling for use in the backward pass
         ctx.hor_scaling = hor_scaling
-        return spk
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -94,6 +101,8 @@ class Triangle(torch.autograd.Function):
     **Backward pass:** Override Dirac Delta with triangle-shaped function
     """
 
+    generate_vmap_rule = True
+
     @staticmethod
     def surrogate_grad(x: torch.Tensor, gamma: float):
         """Computes Triangle surrogate gradient.
@@ -113,7 +122,7 @@ class Triangle(torch.autograd.Function):
         return gamma * torch.maximum(torch.tensor(0.0), 1 - torch.abs(x))
 
     @staticmethod
-    def forward(ctx, mem: torch.Tensor, gamma: float = 0.3):
+    def forward(mem: torch.Tensor, gamma: float = 0.3):
         """Forward pass
 
         Parameters
@@ -128,9 +137,14 @@ class Triangle(torch.autograd.Function):
         torch.Tensor
             Output spikes
         """
+        return (mem > 0).float()
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        """Saves context and tensors for the backward pass."""
+        mem, gamma = inputs
         ctx.save_for_backward(mem)
         ctx.gamma = gamma
-        return (mem > 0).float()
 
     @staticmethod
     def backward(ctx, grad_output):

@@ -1,6 +1,7 @@
 import snntorch
 import torch
 from torch import nn
+from torch.func import vmap, jacrev
 
 from dni_modules import (
     DNI,
@@ -161,7 +162,7 @@ class LinearDecoupledNet(DecoupledNet):
         for layer in self.arch:
             if type(layer["dni"].activation) is snntorch.Leaky:
                 layer["dni"].activation.reset_mem()
-                assert layer["dni"].activation.mem.numel() == 0
+                assert torch.count_nonzero(layer["dni"].activation.mem) == 0
 
         for t in range(T):
             z_l = self.arch[0]["dni"](x[t]).detach()
@@ -198,12 +199,7 @@ class LinearDecoupledNet(DecoupledNet):
                         ):
                             temp_mem = self.arch[layer_index + 1]["dni"].activation.mem
 
-                        jacobian_l_plus_1 = torch.autograd.functional.jacobian(
-                            self.arch[layer_index + 1]["dni"], z_l
-                        )
-                        jacobian_l_plus_1_reshaped = jacobian_l_plus_1[
-                            torch.arange(B), :, torch.arange(B), :
-                        ]
+                        jacobian_l_plus_1 = vmap(jacrev(self.arch[layer_index + 1]["dni"]))(z_l)
 
                         if (
                             type(self.arch[layer_index + 1]["dni"].activation)
@@ -213,7 +209,7 @@ class LinearDecoupledNet(DecoupledNet):
 
                         delta_l = torch.einsum(
                             "bij,bi->bj",
-                            jacobian_l_plus_1_reshaped,
+                            jacobian_l_plus_1,
                             synth_delta_l_plus_1,
                         )  # (B, M, D) (B,  M) -> (B, D)
 
