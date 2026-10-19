@@ -22,13 +22,12 @@ class DNI(nn.Module):
         if type(builder) is LazyLinearDNIBuilder:
             self.layer = self.net[1]
             self.activation = self.net[2]
-            self.register_buffer("elig_eps", torch.zeros(1))
         else:
             self.layer = self.net[0]  # alias for Linear or Conv2d layer
             self.activation = (
                 self.net[2] if builder.batch_norm else self.net[1]
             )  # alias for activation layer
-            self.register_buffer("elig_eps", torch.zeros_like(self.layer.weight))
+        self.register_buffer("elig_eps", torch.zeros(1))
 
     def forward(self, x: torch.Tensor):
         """Propagates input through DNI's internal net and updates eligibility traces epsilon if spiking activations are used.
@@ -55,6 +54,25 @@ class DNI(nn.Module):
 
         return out
 
+    def init_elig_eps(self, B: int):
+        """Initializes eligbility traces epsilon.
+
+        Parameters
+        __________
+        B : int
+            Batch size
+        """
+
+        if type(self.layer) is nn.Linear:
+            self.elig_eps = torch.zeros(
+                (B, self.layer.in_features), device=self.layer.weight.device
+            )
+
+        if type(self.layer) is nn.Conv2d:
+            raise NotImplementedError(
+                "DNI eligibility traces epsilon initialization is currently supported for Linear layers only."
+            )
+
     def update_elig_eps(self, x: torch.Tensor):
         """Updates eligibility traces epsilon.
 
@@ -70,17 +88,9 @@ class DNI(nn.Module):
         if type(self.layer) is nn.Linear:
             # LazyLinear DNI
             if x.ndim > 2:
-                dv = torch.mean(x.reshape(x.shape[0], -1), axis=0).unsqueeze(
-                    0
-                )  # Shape: (1, flattened vector dim)
-                # Initialize elig_eps if it hasn't been initialized yet
-                if torch.equal(
-                    self.elig_eps,
-                    torch.zeros(1, device=self.layer.weight.device),
-                ):
-                    self.elig_eps = torch.zeros_like(self.layer.weight)
+                dv = x.reshape(x.shape[0], -1)  # Shape: (B, flattened vector dim)
             else:
-                dv = torch.mean(x, axis=0).unsqueeze(0)  # Shape: (1, D_in)
+                dv = x  # Shape: (B, D_in)
 
         if type(self.layer) is nn.Conv2d:
             # If padding has been set to "same" and kernel_size is odd, manually compute padding because unfold() function cannot accept string "same" for padding parameter.
@@ -109,7 +119,7 @@ class DNI(nn.Module):
             # Sum over spatial output locations
             x_unfold = x_unfold.sum(dim=-1)  # Shape: (B, c_in, k, k)
 
-            dv = torch.mean(x_unfold, axis=0)  # Shape: (1, c_in, k, k)
+            dv = x_unfold  # Shape: (B, c_in, k, k)
 
         self.elig_eps = self.activation.beta * self.elig_eps + dv
 
@@ -117,10 +127,13 @@ class DNI(nn.Module):
         """Sets eligibility traces epsilon to zero."""
         self.elig_eps = torch.zeros_like(self.elig_eps)
 
-    def update_dni_parameters(
-        self, x: torch.Tensor, synth_delta: torch.Tensor, lr: float
+    def update_dni_param_grad(
+        self,
+        x: torch.Tensor,
+        z: torch.Tensor,
+        synth_delta: torch.Tensor,
     ):
-        """Updates DNI learnable parameters (Conv2d DNIs not supported yet).
+        """Updates the gradients of the DNI's learnable parameters (Conv2d DNIs not supported yet).
 
         Parameters
         ----------
@@ -128,39 +141,37 @@ class DNI(nn.Module):
             Input tensor with shape :math:`(B, H_{in})` for Linear DNI and :math:`(B, C_{in}, H, W)` for LazyLinear DNI,
             where :math:`B` is the batch size, :math:`H_{in}` is the number of input features, :math:`C_{in}` is the number of input channels and
             :math:`H` and :math:`W` are the input height and width.
+        z : torch.Tensor
+            Output tensor with shape :math`(B, H_{out})` for Linear and LazyLinear DNI, where :math:`B` is the batch size and :math:`H_{out}` is the number of output features.
         synth_delta : torch.Tensor
             Synthetic gradient tensor with shape :math:`(B, H_{out})` for Linear and LazyLinear DNI, where :math:`B` is the batch size and
             :math:`H_{out}` is the number of output features.
-        lr : float
-            Learning rate
         """
-        with torch.no_grad():
-            if type(self.layer) is nn.Linear:
-                if type(self.activation) is nn.ReLU:
-                    x_flat = x.reshape(
-                        (x.shape[0], -1)
-                    )  # Necessary for a LazyLinearDNI
-                    batched_grad = torch.einsum(
-                        "bi,bj->bij", synth_delta, x_flat
-                    )  # shape (B, H_{out}, H_{in})
-                    self.layer.weight.sub_(lr * torch.mean(batched_grad, axis=0))
-                    if self.layer.bias is not None:
-                        self.layer.bias.sub_(lr * torch.mean(synth_delta, axis=0))
-                elif type(self.activation) is snntorch.Leaky:
-                    self.update_elig_eps(x)
-                    sur_grad = self.activation.spike_grad.surrogate_grad(
-                        self.activation.mem - self.activation.threshold
-                    )  # shape (B, hidden_dni_features)
-                    self.layer.weight.sub_(
-                        lr
-                        * torch.mean(sur_grad * synth_delta, axis=0).unsqueeze(1)
-                        * self.elig_eps
-                    )
-                else:
-                    raise NotImplementedError(
-                        "DNI parameter updates are currently only supported for ReLU and Leaky activations."
-                    )
+        if type(self.layer) is nn.Linear:
+            if type(self.activation) is nn.ReLU:
+                z.backward(gradient=synth_delta)
+
+            elif type(self.activation) is snntorch.Leaky:
+                if self.layer.weight.grad is None:
+                    self.layer.weight.grad = torch.zeros_like(self.layer.weight)
+
+                self.update_elig_eps(x)
+                sur_grad = self.activation.spike_grad.surrogate_grad(
+                    self.activation.mem - self.activation.threshold
+                )
+
+                with torch.no_grad():
+                    self.layer.weight.grad += (synth_delta * sur_grad).T @ self.elig_eps
+                    if x.requires_grad:
+                        x.grad = ((synth_delta * sur_grad) @ self.layer.weight).reshape(
+                            x.shape
+                        )
+
             else:
                 raise NotImplementedError(
-                    "DNI parameter updates are currently only supported for DNIs with a linear layer."
+                    "DNI parameter gradient updates are currently only supported for ReLU and Leaky activations."
                 )
+        else:
+            raise NotImplementedError(
+                "DNI parameter gradient updates are currently only supported for DNIs with a linear layer."
+            )

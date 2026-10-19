@@ -1,7 +1,6 @@
 import snntorch
 import torch
 from torch import nn
-from torch.func import vmap, jacrev
 
 from dni_modules import (
     DNI,
@@ -151,6 +150,8 @@ class LinearDecoupledNet(DecoupledNet):
 
         T = x.shape[0]
         B = x.shape[1]
+        x = torch.reshape(x, (T, B, -1))  # Reshape x to (T, B, H_{in}) shape
+
         synth_grad_loss_fn = nn.MSELoss(reduction="sum")
 
         y = nn.functional.one_hot(targets, num_classes=self.out_features).to(
@@ -158,79 +159,82 @@ class LinearDecoupledNet(DecoupledNet):
         )
         out = []
 
-        # Reset membrane potentials for Leaky activations
+        # Reset membrane potentials for Leaky activations and initialize DNI elig_eps
         for layer in self.arch:
             if type(layer["dni"].activation) is snntorch.Leaky:
                 layer["dni"].activation.reset_mem()
                 assert torch.count_nonzero(layer["dni"].activation.mem) == 0
 
+                layer["dni"].init_elig_eps(B)
+
         for t in range(T):
-            z_l = self.arch[0]["dni"](x[t]).detach()
+            z_l = self.arch[0]["dni"](x[t])
 
             if self.training:
                 synth_delta_l = self.arch[1]["synth_grad"](
-                    z_l
+                    z_l.detach().requires_grad_(True)
                 )  # shape (B, hidden_dni_features)
-                # Update DNI
-                self.arch[0]["dni"].update_dni_parameters(x[t], synth_delta_l, lr)
+
+                # Update DNI parameter gradients
+                self.arch[0]["dni"].update_dni_param_grad(x[t], z_l, synth_delta_l)
+
+                # Apply local parameter updates
+                # with torch.no_grad():
+                #     for param in self.arch[0]["dni"].net.parameters():
+                #             if param.grad is not None:
+                #                 param.sub_(lr * param.grad)
+                #                 param.grad.zero_()
+
+            z_l = z_l.detach().requires_grad_(True)
 
             for layer_index in range(len(self.arch) - 1):
                 # Compute z_{l+1}
-                z_l_plus_1 = (
-                    self.arch[layer_index + 1]["dni"](z_l).detach().requires_grad_(True)
-                )
+                z_l_plus_1 = self.arch[layer_index + 1]["dni"](z_l)
 
                 if self.training:
                     if layer_index < len(self.arch) - 2:
                         synth_delta_l_plus_1 = self.arch[layer_index + 2]["synth_grad"](
-                            z_l_plus_1
+                            z_l_plus_1.detach().requires_grad_(True)
                         )
                     else:
-                        loss = loss_fn(z_l_plus_1, y)
+                        loss = (
+                            loss_fn(torch.softmax(z_l_plus_1, dim=1), y)
+                            if type(loss_fn) is nn.CrossEntropyLoss
+                            else loss_fn(z_l_plus_1, y)
+                        )
                         synth_delta_l_plus_1 = torch.autograd.grad(
                             loss, z_l_plus_1, retain_graph=False
                         )[0]
 
-                    with torch.no_grad():
-                        # Compute f'_{l+1}(z_l)
-                        if (
-                            type(self.arch[layer_index + 1]["dni"].activation)
-                            is snntorch.Leaky
-                        ):
-                            temp_mem = self.arch[layer_index + 1]["dni"].activation.mem
-
-                        jacobian_l_plus_1 = vmap(jacrev(self.arch[layer_index + 1]["dni"]))(z_l)
-
-                        if (
-                            type(self.arch[layer_index + 1]["dni"].activation)
-                            is snntorch.Leaky
-                        ):
-                            self.arch[layer_index + 1]["dni"].activation.mem = temp_mem
-
-                        delta_l = torch.einsum(
-                            "bij,bi->bj",
-                            jacobian_l_plus_1,
-                            synth_delta_l_plus_1,
-                        )  # (B, M, D) (B,  M) -> (B, D)
-
-                    # Update DNI
-                    self.arch[layer_index + 1]["dni"].update_dni_parameters(
-                        z_l, synth_delta_l_plus_1, lr
+                    # Update DNI parameter gradients
+                    self.arch[layer_index + 1]["dni"].update_dni_param_grad(
+                        z_l,
+                        z_l_plus_1,
+                        synth_delta_l_plus_1,
                     )
 
+                    # Apply local parameter updates
+                    # with torch.no_grad():
+                    #     for param in self.arch[layer_index + 1]["dni"].net.parameters():
+                    #             if param.grad is not None:
+                    #                 param.sub_(lr * param.grad)
+                    #                 param.grad.zero_()
+
+                    delta_l = z_l.grad
+
                     loss_grad = synth_grad_loss_fn(synth_delta_l, delta_l)
-                    loss_grad.backward()
+                    loss_grad.backward(retain_graph=True)
 
-                    # Update SynthGrad
-                    with torch.no_grad():
-                        for param in self.arch[layer_index + 1][
-                            "synth_grad"
-                        ].parameters():
-                            if param.grad is not None:
-                                param.sub_(lr * param.grad)
-                                param.grad.zero_()
+                    # Apply local parameter updates
+                    # with torch.no_grad():
+                    #     for param in self.arch[layer_index + 1][
+                    #         "synth_grad"
+                    #     ].parameters():
+                    #         if param.grad is not None:
+                    #             param.sub_(lr * param.grad)
+                    #             param.grad.zero_()
 
-                z_l = z_l_plus_1
+                z_l = z_l_plus_1.detach().requires_grad_(True)
                 if self.training:
                     synth_delta_l = synth_delta_l_plus_1
 

@@ -30,7 +30,7 @@ LINEAR_DNI_BUILDER_TEST_CASES = list(
             ReLUActivationBuilder(),
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
-        [False],  # batch_norm
+        [True, False],  # batch_norm
     )
 )
 
