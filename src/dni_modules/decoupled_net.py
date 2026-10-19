@@ -127,6 +127,7 @@ class LinearDecoupledNet(DecoupledNet):
         targets: torch.Tensor,
         lr: float,
         loss_fn,
+        local_update: bool = False,
     ):
         """Propagates input through all the DNI layers of the LinearDecoupledNet. If LinearDecoupledNet is in training mode, DNI and SynthGrad parameters are updated.
 
@@ -141,6 +142,8 @@ class LinearDecoupledNet(DecoupledNet):
             Learning rate
         loss_fn :
             Output loss function
+        local_update : bool, optional
+            If set to True, DNI parameter updates are applied immediately after gradient computation. By default False.
 
         Returns
         -------
@@ -179,11 +182,12 @@ class LinearDecoupledNet(DecoupledNet):
                 self.arch[0]["dni"].update_dni_param_grad(x[t], z_l, synth_delta_l)
 
                 # Apply local parameter updates
-                # with torch.no_grad():
-                #     for param in self.arch[0]["dni"].net.parameters():
-                #             if param.grad is not None:
-                #                 param.sub_(lr * param.grad)
-                #                 param.grad.zero_()
+                if local_update:
+                    with torch.no_grad():
+                        for param in self.arch[0]["dni"].net.parameters():
+                            if param.grad is not None:
+                                param.sub_(lr * param.grad)
+                                param.grad.zero_()
 
             z_l = z_l.detach().requires_grad_(True)
 
@@ -214,11 +218,14 @@ class LinearDecoupledNet(DecoupledNet):
                     )
 
                     # Apply local parameter updates
-                    # with torch.no_grad():
-                    #     for param in self.arch[layer_index + 1]["dni"].net.parameters():
-                    #             if param.grad is not None:
-                    #                 param.sub_(lr * param.grad)
-                    #                 param.grad.zero_()
+                    if local_update:
+                        with torch.no_grad():
+                            for param in self.arch[layer_index + 1][
+                                "dni"
+                            ].net.parameters():
+                                if param.grad is not None:
+                                    param.sub_(lr * param.grad)
+                                    param.grad.zero_()
 
                     delta_l = z_l.grad
 
@@ -226,13 +233,14 @@ class LinearDecoupledNet(DecoupledNet):
                     loss_grad.backward(retain_graph=True)
 
                     # Apply local parameter updates
-                    # with torch.no_grad():
-                    #     for param in self.arch[layer_index + 1][
-                    #         "synth_grad"
-                    #     ].parameters():
-                    #         if param.grad is not None:
-                    #             param.sub_(lr * param.grad)
-                    #             param.grad.zero_()
+                    if local_update:
+                        with torch.no_grad():
+                            for param in self.arch[layer_index + 1][
+                                "synth_grad"
+                            ].parameters():
+                                if param.grad is not None:
+                                    param.sub_(lr * param.grad)
+                                    param.grad.zero_()
 
                 z_l = z_l_plus_1.detach().requires_grad_(True)
                 if self.training:

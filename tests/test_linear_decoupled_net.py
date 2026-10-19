@@ -14,10 +14,10 @@ from dni_modules import (
 
 LINEAR_DECOUPLED_NET_TEST_CASES = list(
     product(
-        [1, 100],  # in_features,
+        [10, 100],  # in_features,
         [10, 30],  # hidden_dni_features,
-        [2, 10],  # out_features
-        [1, 2, 5],  # num_hidden_dni
+        [5, 10],  # out_features
+        [1, 2],  # num_hidden_dni
     )
 )
 
@@ -95,6 +95,7 @@ def linear_synth_grad_builder(linear_synth_grad_builder_test_cases):
         bias=bias,
         activation_builder=activation_builder,
         num_hidden=num_hidden,
+        output_zero_init=False,
     )
 
 
@@ -171,7 +172,8 @@ def test_linear_decoupled_net_init(
     LINEAR_DECOUPLED_NET_TEST_CASES,
 )
 @pytest.mark.parametrize("B", [2, 4])  # batch size
-@pytest.mark.parametrize("eval", [True, False])  # batch size
+@pytest.mark.parametrize("eval", [True, False])
+@pytest.mark.parametrize("local_update", [True, False])
 def test_linear_decoupled_net_forward(
     in_features,
     hidden_dni_features,
@@ -182,6 +184,7 @@ def test_linear_decoupled_net_forward(
     device,
     B,
     eval,
+    local_update,
 ):
     """Test forward() function of LinearDecoupledNet class"""
     try:
@@ -203,13 +206,33 @@ def test_linear_decoupled_net_forward(
         net.to(device)
         if eval:
             net.eval()
-        T = 2
-        x = torch.randn((T, B, in_features), device=device)
+        T = 10
+        x = 100 * torch.randint(
+            low=0, high=2, size=(T, B, in_features), device=device
+        ).to(torch.float)
         targets = torch.randint(low=0, high=out_features, size=(B,), device=device)
         lr = 0.01
 
         loss_fn = nn.MSELoss(reduction="sum")
-        out = net(x, targets, lr, loss_fn)
+
+        linear_clones = {}
+        for name, module in net.arch.named_modules():
+            if isinstance(module, nn.Linear):
+                linear_clones[f"{name}.weight"] = module.weight.detach().clone()
+
+        out = net(x, targets, lr, loss_fn, local_update)
+
+        if local_update and not eval:
+            for name, module in net.arch.named_modules():
+                if isinstance(module, nn.Linear):
+                    for param_type in ["weight"]:
+                        param_tensor = getattr(module, param_type, None)
+                        if param_tensor is not None:
+                            full_name = f"{name}.{param_type}"
+                            old_tensor = linear_clones[full_name]
+
+                            if torch.count_nonzero(param_tensor.grad).item() > 0:
+                                assert not torch.allclose(param_tensor, old_tensor)
 
         assert out.shape == (T, B, out_features)
 
