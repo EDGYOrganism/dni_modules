@@ -17,7 +17,7 @@ LINEAR_DECOUPLED_NET_TEST_CASES = list(
         [10, 100],  # in_features,
         [10, 30],  # hidden_dni_features,
         [5, 10],  # out_features
-        [1, 2],  # num_hidden_dni
+        [0, 2],  # num_hidden_dni
     )
 )
 
@@ -124,7 +124,7 @@ def test_linear_decoupled_net_init(
     except ValueError as e:
         assert (
             str(e)
-            == f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
+            == f"Number of hidden DNI layers cannot be smaller than 1: num_hidden_dni = {num_hidden_dni}"
         )
     else:
         assert net.in_features == in_features
@@ -200,7 +200,7 @@ def test_linear_decoupled_net_forward(
         assert isinstance(e, ValueError)
         assert (
             str(e)
-            == f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
+            == f"Number of hidden DNI layers cannot be smaller than 1: num_hidden_dni = {num_hidden_dni}"
         )
     else:
         net.to(device)

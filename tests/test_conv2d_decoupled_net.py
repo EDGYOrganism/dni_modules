@@ -153,7 +153,7 @@ def test_conv2d_decoupled_net_init(
     except ValueError as e:
         assert (
             str(e)
-            == f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
+            == f"Number of hidden DNI layers cannot be smaller than 1: num_hidden_dni = {num_hidden_dni}"
         )
     else:
         assert net.in_channels == in_channels
@@ -225,7 +225,7 @@ def test_conv2d_decoupled_net_forward(
     except ValueError as e:
         assert (
             str(e)
-            == f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
+            == f"Number of hidden DNI layers cannot be smaller than 1: num_hidden_dni = {num_hidden_dni}"
         )
     else:
         net.to(device)

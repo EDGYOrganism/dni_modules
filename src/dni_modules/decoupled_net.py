@@ -31,7 +31,7 @@ class DecoupledNet(nn.Module):
     Raises
     ------
     ValueError
-        Number of hidden DNI layers cannot be smaller than 2.
+        Number of hidden DNI layers cannot be smaller than 1.
     """
 
     def __init__(
@@ -42,9 +42,9 @@ class DecoupledNet(nn.Module):
     ):
         super().__init__()
 
-        if num_hidden_dni < 2:
+        if num_hidden_dni < 1:
             raise ValueError(
-                f"Number of hidden DNI layers cannot be smaller than 2: num_hidden_dni = {num_hidden_dni}"
+                f"Number of hidden DNI layers cannot be smaller than 1: num_hidden_dni = {num_hidden_dni}"
             )
         self.dni_builder = dni_builder
         self.synth_grad_builder = synth_grad_builder
@@ -108,6 +108,7 @@ class LinearDecoupledNet(DecoupledNet):
             )
 
         # Set out_features for dni_builder and deactivate batch_norm
+        self.dni_builder.in_features = self.hidden_dni_features
         self.dni_builder.out_features = self.out_features
         self.dni_builder.batch_norm = False
 
