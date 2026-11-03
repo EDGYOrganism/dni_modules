@@ -19,3 +19,9 @@ This documentation describes how to build Artificial and Spiking Neural Networks
    :caption: Examples:
 
    examples/ann_dni.nblink
+
+
+Acknowledgements
+________________
+
+This work was conducted under the `Edgy Organism <https://www-users.york.ac.uk/~mt540/edgy-organism/>`_ project, funded by EPSRC grant number EP/Y030133/1.

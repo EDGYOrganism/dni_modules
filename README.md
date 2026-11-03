@@ -38,3 +38,7 @@ To run the unit tests placed under the `tests` directory:
 cd <path_to_dni_modules>
 pytest
 ```
+
+### Acknowledgements
+
+This work was conducted under the [Edgy Organism](https://www-users.york.ac.uk/~mt540/edgy-organism/) project, funded by EPSRC grant number EP/Y030133/1.
