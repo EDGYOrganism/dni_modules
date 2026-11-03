@@ -1,0 +1,12 @@
+/* Hide Jupyter notebook cell counters / prompts */
+.nbinput .prompt,
+.nboutput .prompt {
+    display: none;
+}
+
+/* Force-hide all cell output containers in nbsphinx */
+div.nboutput,
+div.nboutput.container,
+div.nboutput.docutils.container {
+    display: none !important;
+}

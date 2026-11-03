@@ -6,10 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "DecoupleNet"
+project = "DecoupledNet"
 copyright = "2026, Epifanios Baikas"
 author = "Epifanios Baikas"
-release = "0.1.0"
+release = "0.6.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -19,6 +19,8 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_autodoc_typehints",
     "sphinx.ext.githubpages",
+    "nbsphinx",
+    "nbsphinx_link"
 ]
 
 templates_path = ["_templates"]
@@ -30,3 +32,6 @@ exclude_patterns = []
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
+html_css_files = [
+    'custom.css',
+]

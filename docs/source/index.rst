@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-DecoupleNet documentation
-=========================
+DecoupledNet documentation
+==========================
 
 This documentation describes how to build Artificial and Spiking Neural Networks using the components of the dni_modules package.
 
@@ -14,3 +14,8 @@ This documentation describes how to build Artificial and Spiking Neural Networks
 
    dni_modules
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples:
+
+   examples/ann_dni.nblink
