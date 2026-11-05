@@ -70,6 +70,8 @@ class LinearDecoupledNet(DecoupledNet):
         LinearSynthGrad instance used for building SynthGrad modules
     num_hidden_dni : int, optional
         Number of hidden DNI layers, by default 2
+    target_injection : bool, optional
+         If set to True, the target vector in one-hot encoded format is concatenated to the activation vector used as input for synthetic gradient modules. By default False.
     """
 
     def __init__(
@@ -80,6 +82,7 @@ class LinearDecoupledNet(DecoupledNet):
         dni_builder: LinearDNIBuilder,
         synth_grad_builder: LinearSynthGradBuilder,
         num_hidden_dni: int = 2,
+        target_injection: bool = False,
     ):
         super().__init__(
             dni_builder=dni_builder,
@@ -90,12 +93,17 @@ class LinearDecoupledNet(DecoupledNet):
         self.in_features = in_features
         self.hidden_dni_features = hidden_dni_features
         self.out_features = out_features
+        self.target_injection = target_injection
 
         # Set out_features for dni_builder
         self.dni_builder.out_features = self.hidden_dni_features
 
         # Set in_features and out_features for synth_grad_builder
-        self.synth_grad_builder.in_features = self.hidden_dni_features
+        self.synth_grad_builder.in_features = (
+            self.hidden_dni_features + self.out_features
+            if self.target_injection
+            else self.hidden_dni_features
+        )
         self.synth_grad_builder.out_features = self.hidden_dni_features
 
         for i in range(self.num_hidden_dni):
@@ -175,8 +183,13 @@ class LinearDecoupledNet(DecoupledNet):
             z_l = self.arch[0]["dni"](x[t])
 
             if self.training:
+                synth_delta_input = (
+                    torch.hstack((z_l.detach().requires_grad_(True), y))
+                    if self.target_injection
+                    else z_l.detach().requires_grad_(True)
+                )
                 synth_delta_l = self.arch[1]["synth_grad"](
-                    z_l.detach().requires_grad_(True)
+                    synth_delta_input
                 )  # shape (B, hidden_dni_features)
 
                 # Update DNI parameter gradients
@@ -198,8 +211,13 @@ class LinearDecoupledNet(DecoupledNet):
 
                 if self.training:
                     if layer_index < len(self.arch) - 2:
+                        synth_delta_input = (
+                            torch.hstack((z_l_plus_1.detach().requires_grad_(True), y))
+                            if self.target_injection
+                            else z_l_plus_1.detach().requires_grad_(True)
+                        )
                         synth_delta_l_plus_1 = self.arch[layer_index + 2]["synth_grad"](
-                            z_l_plus_1.detach().requires_grad_(True)
+                            synth_delta_input
                         )
                     else:
                         loss = (

@@ -18,6 +18,7 @@ LINEAR_DECOUPLED_NET_TEST_CASES = list(
         [10, 30],  # hidden_dni_features,
         [5, 10],  # out_features
         [0, 2],  # num_hidden_dni
+        [False, True],  # target_injection
     )
 )
 
@@ -100,7 +101,7 @@ def linear_synth_grad_builder(linear_synth_grad_builder_test_cases):
 
 
 @pytest.mark.parametrize(
-    "in_features, hidden_dni_features, out_features, num_hidden_dni",
+    "in_features, hidden_dni_features, out_features, num_hidden_dni, target_injection",
     LINEAR_DECOUPLED_NET_TEST_CASES,
 )
 def test_linear_decoupled_net_init(
@@ -108,6 +109,7 @@ def test_linear_decoupled_net_init(
     hidden_dni_features,
     out_features,
     num_hidden_dni,
+    target_injection,
     linear_dni_builder,
     linear_synth_grad_builder,
 ):
@@ -120,6 +122,7 @@ def test_linear_decoupled_net_init(
             dni_builder=linear_dni_builder,
             synth_grad_builder=linear_synth_grad_builder,
             num_hidden_dni=num_hidden_dni,
+            target_injection=target_injection,
         )
     except ValueError as e:
         assert (
@@ -133,6 +136,7 @@ def test_linear_decoupled_net_init(
         assert id(net.dni_builder) == id(linear_dni_builder)
         assert id(net.synth_grad_builder) == id(linear_synth_grad_builder)
         assert net.num_hidden_dni == num_hidden_dni
+        assert net.target_injection == target_injection
         assert len(net.arch) == num_hidden_dni + 1
 
         # Check hidden DNI layers
@@ -142,10 +146,16 @@ def test_linear_decoupled_net_init(
                 assert net.arch[i]["synth_grad"] is None
             else:
                 assert net.arch[i]["dni"].layer.in_features == hidden_dni_features
-                assert (
-                    net.arch[i]["synth_grad"].net[0].in_features
-                    == net.arch[i - 1]["dni"].layer.out_features
-                )
+                if net.target_injection:
+                    assert (
+                        net.arch[i]["synth_grad"].net[0].in_features
+                        == net.arch[i - 1]["dni"].layer.out_features + net.out_features
+                    )
+                else:
+                    assert (
+                        net.arch[i]["synth_grad"].net[0].in_features
+                        == net.arch[i - 1]["dni"].layer.out_features
+                    )
                 assert (
                     net.arch[i]["synth_grad"].net[-1].out_features
                     == net.arch[i - 1]["dni"].layer.out_features
@@ -157,10 +167,17 @@ def test_linear_decoupled_net_init(
         assert net.arch[-1]["dni"].layer.in_features == hidden_dni_features
         assert net.arch[-1]["dni"].layer.out_features == out_features
 
-        assert (
-            net.arch[-1]["synth_grad"].net[0].in_features
-            == net.arch[num_hidden_dni - 1]["dni"].layer.out_features
-        )
+        if net.target_injection:
+            assert (
+                net.arch[-1]["synth_grad"].net[0].in_features
+                == net.arch[num_hidden_dni - 1]["dni"].layer.out_features
+                + net.out_features
+            )
+        else:
+            assert (
+                net.arch[-1]["synth_grad"].net[0].in_features
+                == net.arch[num_hidden_dni - 1]["dni"].layer.out_features
+            )
         assert (
             net.arch[-1]["synth_grad"].net[-1].out_features
             == net.arch[num_hidden_dni - 1]["dni"].layer.out_features
@@ -168,7 +185,7 @@ def test_linear_decoupled_net_init(
 
 
 @pytest.mark.parametrize(
-    "in_features, hidden_dni_features, out_features, num_hidden_dni",
+    "in_features, hidden_dni_features, out_features, num_hidden_dni, target_injection",
     LINEAR_DECOUPLED_NET_TEST_CASES,
 )
 @pytest.mark.parametrize("B", [2, 4])  # batch size
@@ -179,6 +196,7 @@ def test_linear_decoupled_net_forward(
     hidden_dni_features,
     out_features,
     num_hidden_dni,
+    target_injection,
     linear_dni_builder,
     linear_synth_grad_builder,
     device,
@@ -195,6 +213,7 @@ def test_linear_decoupled_net_forward(
             dni_builder=linear_dni_builder,
             synth_grad_builder=linear_synth_grad_builder,
             num_hidden_dni=num_hidden_dni,
+            target_injection=target_injection,
         )
     except ValueError as e:
         assert isinstance(e, ValueError)
