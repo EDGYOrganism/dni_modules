@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'docs/**'                                # Triggers when any file in docs/ changes
+      - 'jupyter/**'                             # Triggers when any file in jupyter/ changes
       - '.github/workflows/deploy_docs.yml'      # Triggers if you update this workflow
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment

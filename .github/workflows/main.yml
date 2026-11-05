@@ -4,6 +4,7 @@ on:
   push:
     paths-ignore:
       - 'docs/**'                                # Skips this workflow if only docs were changed
+      - 'jupyter/**'                             # Skips this workflow if only jupyter notebooks were changed
       - '.github/workflows/deploy_docs.yml'
       - 'README.md'
 
