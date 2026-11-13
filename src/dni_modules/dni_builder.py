@@ -28,6 +28,8 @@ class LinearDNIBuilder(DNIBuilder):
         Activation builder, by default ReLUActivationBuilder()
     batch_norm : bool, optional
         If set to False, the DNI will not include a batch normalization layer. By default True.
+    weight_init_type : str, optional
+        Specifies the type of distribution from which the weights of the Linear layer will be sampled for initialization. By default "standard".
     """
 
     def __init__(
@@ -37,6 +39,7 @@ class LinearDNIBuilder(DNIBuilder):
         bias: bool = True,
         activation_builder: ActivationBuilder = ReLUActivationBuilder(),
         batch_norm: bool = True,
+        weight_init_type: str = "standard",
     ):
 
         self.in_features = in_features
@@ -44,6 +47,12 @@ class LinearDNIBuilder(DNIBuilder):
         self.bias = bias
         self.activation_builder = activation_builder
         self.batch_norm = batch_norm
+        self.weight_init_type = weight_init_type
+
+        if self.weight_init_type not in ["standard", "kaiming_normal"]:
+            raise ValueError(
+                f"Invalid weight initialization distribution: {self.weight_init_type}"
+            )
 
     def build(self):
         """Builds Linear Decoupled Neural Interface.
@@ -54,6 +63,9 @@ class LinearDNIBuilder(DNIBuilder):
             built nn.Sequential() containing layers for a Linear DNI
         """
         layers = [nn.Linear(self.in_features, self.out_features, self.bias)]
+
+        if self.weight_init_type == "kaiming_normal":
+            nn.init.kaiming_normal_(layers[0].weight)
 
         if self.batch_norm:
             layers.append(nn.BatchNorm1d(num_features=self.out_features))

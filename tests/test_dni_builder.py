@@ -25,6 +25,7 @@ LINEAR_DNI_BUILDER_TEST_CASES = list(
             LeakyActivationBuilder(beta=0.8, threshold=0.5),
         ],  # activation_builder
         [True, False],  # batch_norm
+        ["standard", "kaiming_normal", "error"],  # weight_init_type
     )
 )
 
@@ -71,65 +72,82 @@ def test_dni_builder_raises_error():
 
 
 @pytest.mark.parametrize(
-    "in_features, out_features, bias, activation_builder, batch_norm",
+    "in_features, out_features, bias, activation_builder, batch_norm, weight_init_type",
     LINEAR_DNI_BUILDER_TEST_CASES,
 )
 def test_linear_dni_builder_init(
-    in_features, out_features, bias, activation_builder, batch_norm
+    in_features, out_features, bias, activation_builder, batch_norm, weight_init_type
 ):
     """Test the __init__ function of LinearDNIBuilder class"""
-    builder = LinearDNIBuilder(
-        in_features=in_features,
-        out_features=out_features,
-        bias=bias,
-        activation_builder=activation_builder,
-        batch_norm=batch_norm,
-    )
-    assert builder.in_features == in_features
-    assert builder.out_features == out_features
-    assert builder.bias == bias
-    assert type(builder.activation_builder) is type(activation_builder)
-    assert builder.batch_norm == batch_norm
+    try:
+        builder = LinearDNIBuilder(
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias,
+            activation_builder=activation_builder,
+            batch_norm=batch_norm,
+            weight_init_type=weight_init_type,
+        )
+    except ValueError as e:
+        assert (
+            str(e) == f"Invalid weight initialization distribution: {weight_init_type}"
+        )
+    else:
+        assert builder.in_features == in_features
+        assert builder.out_features == out_features
+        assert builder.bias == bias
+        assert type(builder.activation_builder) is type(activation_builder)
+        assert builder.batch_norm == batch_norm
+        assert builder.weight_init_type == weight_init_type
 
 
 @pytest.mark.parametrize(
-    "in_features, out_features, bias, activation_builder, batch_norm",
+    "in_features, out_features, bias, activation_builder, batch_norm, weight_init_type",
     LINEAR_DNI_BUILDER_TEST_CASES,
 )
 def test_linear_dni_builder_build(
-    in_features, out_features, bias, activation_builder, batch_norm
+    in_features, out_features, bias, activation_builder, batch_norm, weight_init_type
 ):
     """Test the build() function of LinearDNIBuilder class"""
-    builder = LinearDNIBuilder(
-        in_features=in_features,
-        out_features=out_features,
-        bias=bias,
-        activation_builder=activation_builder,
-        batch_norm=batch_norm,
-    )
-    dni = builder.build()
-    i = 0  # layer index
-    assert len(dni) == 3 if batch_norm else 2
-    assert type(dni[i]) is nn.Linear
-    assert dni[i].weight.shape == (out_features, in_features)
-    if bias is True:
-        assert dni[i].bias is not None
-        assert dni[i].bias.shape == (out_features,)
-    else:
-        assert dni[i].bias is None
-
-    i += 1
-    if batch_norm:
-        assert type(dni[i]) is nn.BatchNorm1d
-        assert dni[i].num_features == out_features
-        i += 1
-
-    if type(activation_builder) is LeakyActivationBuilder:
-        assert type(dni[i]) is snntorch.Leaky
-        assert torch.isclose(dni[i].beta, torch.tensor(builder.activation_builder.beta))
-        assert torch.isclose(
-            dni[i].threshold, torch.tensor(builder.activation_builder.threshold)
+    try:
+        builder = LinearDNIBuilder(
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias,
+            activation_builder=activation_builder,
+            batch_norm=batch_norm,
+            weight_init_type=weight_init_type,
         )
+    except ValueError as e:
+        assert (
+            str(e) == f"Invalid weight initialization distribution: {weight_init_type}"
+        )
+    else:
+        dni = builder.build()
+        i = 0  # layer index
+        assert len(dni) == 3 if batch_norm else 2
+        assert type(dni[i]) is nn.Linear
+        assert dni[i].weight.shape == (out_features, in_features)
+        if bias is True:
+            assert dni[i].bias is not None
+            assert dni[i].bias.shape == (out_features,)
+        else:
+            assert dni[i].bias is None
+
+        i += 1
+        if batch_norm:
+            assert type(dni[i]) is nn.BatchNorm1d
+            assert dni[i].num_features == out_features
+            i += 1
+
+        if type(activation_builder) is LeakyActivationBuilder:
+            assert type(dni[i]) is snntorch.Leaky
+            assert torch.isclose(
+                dni[i].beta, torch.tensor(builder.activation_builder.beta)
+            )
+            assert torch.isclose(
+                dni[i].threshold, torch.tensor(builder.activation_builder.threshold)
+            )
 
 
 @pytest.mark.parametrize(
