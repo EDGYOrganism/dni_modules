@@ -9,7 +9,7 @@
 project = "DecoupledNet"
 copyright = "2026, Epifanios Baikas"
 author = "Epifanios Baikas"
-release = "0.6.0"
+release = "0.7.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
