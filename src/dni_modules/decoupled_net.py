@@ -220,11 +220,7 @@ class LinearDecoupledNet(DecoupledNet):
                             synth_delta_input
                         )
                     else:
-                        loss = (
-                            loss_fn(torch.softmax(z_l_plus_1, dim=1), y)
-                            if type(loss_fn) is nn.CrossEntropyLoss
-                            else loss_fn(z_l_plus_1, y)
-                        )
+                        loss = loss_fn(z_l_plus_1, y)
                         synth_delta_l_plus_1 = torch.autograd.grad(
                             loss, z_l_plus_1, retain_graph=False
                         )[0]
